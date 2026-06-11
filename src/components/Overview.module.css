@@ -1,0 +1,166 @@
+.container { padding: 24px 32px; max-width: 1100px; margin: 0 auto; }
+
+.cashRow {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.cashCard {
+  flex: 1;
+  min-width: 260px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cashLeft { display: flex; align-items: center; gap: 12px; }
+.cashIcon { font-size: 20px; }
+.cashLabel { font-size: 13px; color: var(--text2); margin-bottom: 2px; }
+.cashNote { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; }
+.cashRight { text-align: right; }
+.cashVal { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+.cashApy { font-size: 11px; color: var(--green); font-family: 'DM Mono', monospace; margin-top: 2px; }
+
+.fxCard {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 140px;
+}
+
+.fxInput {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 16px;
+  font-weight: 600;
+  width: 100%;
+}
+.fxInput:focus { outline: none; border-color: var(--green); }
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.metric {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.metricLabel { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.metricVal { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.metricVal.mono { font-family: 'DM Mono', monospace; font-size: 18px; }
+.metricSub { font-size: 11px; color: var(--text3); margin-top: 3px; font-family: 'DM Mono', monospace; }
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+
+.chartSection {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+@media (max-width: 680px) { .chartSection { grid-template-columns: 1fr; } }
+
+.sectionTitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text3);
+  margin-bottom: 16px;
+}
+
+.chartWrap, .legendWrap {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.emptyChart {
+  height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+  font-size: 13px;
+}
+
+.tooltip {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.tooltipName { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+.tooltipVal { font-size: 16px; font-weight: 600; }
+.tooltipPct { font-size: 12px; color: var(--text3); font-family: 'DM Mono', monospace; }
+
+.legendRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.legendRow:last-child { border-bottom: none; }
+
+.legendLeft { display: flex; align-items: center; gap: 12px; }
+.legendDot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.legendName { font-size: 13px; font-weight: 500; }
+.legendSub { font-size: 11px; color: var(--text3); margin-top: 1px; font-family: 'DM Mono', monospace; }
+.legendRight { text-align: right; }
+.legendVal { font-size: 13px; font-weight: 500; }
+.legendPnl { font-size: 11px; margin-top: 1px; font-family: 'DM Mono', monospace; }
+
+.tagSection { }
+.tagCards { display: flex; gap: 12px; flex-wrap: wrap; }
+
+.tagCard {
+  flex: 1;
+  min-width: 220px;
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid transparent;
+}
+
+.tagFC { background: rgba(167,139,250,0.08); border-color: rgba(167,139,250,0.2); }
+.tagEN { background: rgba(255,179,71,0.08); border-color: rgba(255,179,71,0.2); }
+
+.tagBadge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(167,139,250,0.2);
+  color: var(--purple);
+  flex-shrink: 0;
+  font-family: 'DM Mono', monospace;
+}
+.tagBadgeEN { background: rgba(255,179,71,0.2); color: var(--amber); }
+
+.tagVal { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+.tagMeta { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: 'DM Mono', monospace; }
+.tagPnl { font-size: 12px; margin-top: 4px; font-family: 'DM Mono', monospace; }

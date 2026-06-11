@@ -1,0 +1,158 @@
+.container { padding: 24px 32px; max-width: 1100px; margin: 0 auto; }
+
+.legend {
+  font-size: 12px;
+  color: var(--text3);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.catBlock {
+  margin-bottom: 28px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.catHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.catTitle { display: flex; align-items: center; gap: 10px; }
+.catDot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.catName { font-size: 15px; font-weight: 600; }
+.catCurrency { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; }
+.catCount {
+  font-size: 11px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 1px 7px;
+  color: var(--text3);
+  font-family: 'DM Mono', monospace;
+}
+
+.catRight { display: flex; align-items: center; gap: 16px; }
+.catTotals { font-size: 13px; color: var(--text2); font-family: 'DM Mono', monospace; }
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+
+.addBtn {
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text2);
+  transition: all 0.15s;
+}
+.addBtn:hover { border-color: var(--green); color: var(--green); }
+
+.tableHead {
+  display: grid;
+  grid-template-columns: minmax(0,2.5fr) 70px 90px 110px 100px 80px 24px;
+  gap: 8px;
+  padding: 8px 20px;
+  font-size: 11px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--border);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0,2.5fr) 70px 90px 110px 100px 80px 24px;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.row:last-child { border-bottom: none; }
+.row:hover { background: rgba(255,255,255,0.02); }
+
+.nameCol {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.input {
+  background: var(--bg3);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  padding: 4px 8px;
+  font-size: 13px;
+  transition: border-color 0.15s;
+}
+.input:focus { outline: none; border-color: var(--green); }
+.input:hover:not(:focus) { border-color: var(--border2); }
+
+.tickerInput { width: 72px; font-weight: 600; font-family: 'DM Mono', monospace; flex-shrink: 0; }
+.nameInput { flex: 1; min-width: 80px; }
+.numInput { font-family: 'DM Mono', monospace; font-size: 12px; text-align: right; }
+
+.priceCell { position: relative; display: flex; align-items: center; gap: 4px; }
+.valueCell { color: var(--text2); }
+.pnlCell { font-weight: 500; }
+
+.liveTag {
+  font-size: 9px;
+  font-family: 'DM Mono', monospace;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--green-dim);
+  color: var(--green);
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--text3);
+  font-weight: 600;
+  font-family: 'DM Mono', monospace;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.tag:hover { border-color: var(--text2); color: var(--text); }
+.tagFCOn { background: rgba(167,139,250,0.15); color: var(--purple); border-color: rgba(167,139,250,0.4); }
+.tagENOn { background: rgba(255,179,71,0.15); color: var(--amber); border-color: rgba(255,179,71,0.4); }
+
+.delBtn {
+  background: transparent;
+  border: none;
+  color: var(--text3);
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.delBtn:hover { color: var(--red); background: var(--red-dim); }
+
+.empty {
+  padding: 16px 20px;
+  font-size: 13px;
+  color: var(--text3);
+  font-style: italic;
+}

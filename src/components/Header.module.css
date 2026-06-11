@@ -1,0 +1,25 @@
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 32px; border-bottom: 1px solid var(--border);
+  background: rgba(10,10,15,0.85); backdrop-filter: blur(12px);
+  position: sticky; top: 0; z-index: 100;
+}
+.brand { display: flex; align-items: center; gap: 14px; }
+.logo { font-size: 26px; color: var(--green); line-height: 1; }
+.title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+.subtitle { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; margin-top: 1px; }
+.right { display: flex; align-items: center; gap: 8px; }
+.badge {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 20px; font-size: 11px;
+  font-family: 'DM Mono', monospace; border: 1px solid var(--border2);
+  background: var(--bg3); color: var(--text2); cursor: pointer;
+  transition: all 0.2s;
+}
+.badge:hover { border-color: var(--green); color: var(--text); }
+.live, .synced   { color: var(--green); border-color: rgba(0,232,162,0.25); }
+.error           { color: var(--red);   border-color: rgba(255,77,109,0.25); }
+.loading, .syncing { color: var(--amber); }
+.time { color: var(--text3); border-left: 1px solid var(--border2); padding-left: 8px; margin-left: 2px; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
