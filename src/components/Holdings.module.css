@@ -80,7 +80,7 @@
   transition: background 0.15s;
 }
 .row:last-child { border-bottom: none; }
-.row:hover { background: rgba(255,255,255,0.02); }
+.row:hover { background: rgba(28,33,56,0.03); }
 
 .nameCol {
   display: flex;
@@ -159,6 +159,14 @@
   transition: all 0.15s;
 }
 .delBtn:hover { color: var(--red); background: var(--red-dim); }
+
+.flash {
+  animation: flashGlow 1.8s ease-out;
+}
+@keyframes flashGlow {
+  0%   { box-shadow: 0 0 0 3px var(--green); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
 
 .empty {
   padding: 16px 20px;

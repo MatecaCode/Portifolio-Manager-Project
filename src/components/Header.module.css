@@ -1,7 +1,7 @@
 .header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 18px 32px; border-bottom: 1px solid var(--border);
-  background: rgba(10,10,15,0.85); backdrop-filter: blur(12px);
+  background: rgba(255,255,255,0.85); backdrop-filter: blur(12px);
   position: sticky; top: 0; z-index: 100;
 }
 .brand { display: flex; align-items: center; gap: 14px; }

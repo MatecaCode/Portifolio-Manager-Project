@@ -29,11 +29,13 @@ export default function Header({ priceStatus, syncStatus, lastUpdated, onRefresh
       </div>
       <div className={styles.right}>
         {syncStatus !== 'local' && (
-          <div className={`${styles.badge} ${styles[syncStatus]}`}>
+          <div className={`${styles.badge} ${styles[syncStatus]}`}
+            title="Whether your changes are saved to the cloud, so both of you see the same data on any device.">
             {syncIcon}<span>{syncLabel}</span>
           </div>
         )}
-        <button className={`${styles.badge} ${styles[priceStatus]}`} onClick={onRefresh} title="Refresh prices (CoinGecko · Finnhub · Brapi)">
+        <button className={`${styles.badge} ${styles[priceStatus]}`} onClick={onRefresh}
+          title="Prices update automatically every 5 minutes. Click any time to refresh them now.">
           {priceIcon}
           <span>{priceLabel}</span>
           {timeStr && <span className={styles.time}>{timeStr}</span>}

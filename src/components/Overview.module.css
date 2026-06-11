@@ -122,6 +122,16 @@
   padding: 10px 0;
   border-bottom: 1px solid var(--border);
 }
+
+.legendClickable {
+  cursor: pointer;
+  border-radius: 8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  margin: 0 -8px;
+  transition: background 0.15s;
+}
+.legendClickable:hover { background: var(--bg3); }
 .legendRow:last-child { border-bottom: none; }
 
 .legendLeft { display: flex; align-items: center; gap: 12px; }

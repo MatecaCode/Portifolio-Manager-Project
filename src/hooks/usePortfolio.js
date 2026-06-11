@@ -118,12 +118,13 @@ export function usePortfolio() {
 
   const categoryTotals = useCallback(() => {
     const t = {}
-    CATEGORIES.forEach(c => t[c.id] = { value: 0, cost: 0, count: 0 })
+    CATEGORIES.forEach(c => t[c.id] = { value: 0, cost: 0, count: 0, owned: 0 })
     holdings.forEach(h => {
       if (!t[h.category]) return
       t[h.category].value += holdingValue(h)
       t[h.category].cost  += holdingCost(h)
       t[h.category].count++
+      if ((h.shares || 0) > 0) t[h.category].owned++
     })
     return t
   }, [holdings, holdingValue, holdingCost])

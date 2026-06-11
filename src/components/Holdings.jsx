@@ -1,5 +1,14 @@
+import { useEffect } from 'react';
 import { CATEGORIES } from '../data/portfolio';
 import styles from './Holdings.module.css';
+
+const COL_HINTS = {
+  qty: 'How many shares (or units) you own. Zero means it is on the watchlist — planned but not bought yet. For Renda Fixa and funds like ACE/Genoa, enter the amount in reais invested.',
+  cost: 'The average price paid per share when buying. Used to calculate profit or loss.',
+  price: "Today's price per share. Updates automatically for most investments; can also be typed in by hand.",
+  value: 'What this position is worth right now: quantity × current price.',
+  pnl: 'Profit or Loss in percent: how much this position has gained or lost versus what was paid.',
+};
 
 const fmt2 = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 const fmtPct = (n) => (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
@@ -39,7 +48,7 @@ function HoldingRow({ holding, category, onUpdate, onRemove, onToggleTag, holdin
       </div>
 
       <div className={styles.cell}>
-        <span className={styles.cellLabel}>Qty</span>
+        <span className={styles.cellLabel} title={COL_HINTS.qty}>Qty</span>
         <input
           className={`${styles.input} ${styles.numInput}`}
           type="number"
@@ -50,7 +59,7 @@ function HoldingRow({ holding, category, onUpdate, onRemove, onToggleTag, holdin
         />
       </div>
       <div className={styles.cell}>
-        <span className={styles.cellLabel}>Avg Cost</span>
+        <span className={styles.cellLabel} title={COL_HINTS.cost}>Avg Cost</span>
         <input
           className={`${styles.input} ${styles.numInput}`}
           type="number"
@@ -61,7 +70,7 @@ function HoldingRow({ holding, category, onUpdate, onRemove, onToggleTag, holdin
         />
       </div>
       <div className={styles.cell}>
-        <span className={styles.cellLabel}>Current</span>
+        <span className={styles.cellLabel} title={COL_HINTS.price}>Current</span>
         <div className={`${styles.numInput} ${styles.priceCell}`}>
           <input
             className={`${styles.input} ${styles.numInput}`}
@@ -76,13 +85,13 @@ function HoldingRow({ holding, category, onUpdate, onRemove, onToggleTag, holdin
       </div>
 
       <div className={styles.cell}>
-        <span className={styles.cellLabel}>Value</span>
+        <span className={styles.cellLabel} title={COL_HINTS.value}>Value</span>
         <div className={`${styles.numInput} ${styles.valueCell}`}>
           {category.currency} {fmt2(valLocal)}
         </div>
       </div>
       <div className={styles.cell}>
-        <span className={styles.cellLabel}>P/L %</span>
+        <span className={styles.cellLabel} title={COL_HINTS.pnl}>P/L %</span>
         <div className={`${styles.numInput} ${styles.pnlCell} ${pnlLocal >= 0 ? styles.pos : styles.neg}`}>
           {fmtPct(pnlPct)}
         </div>
@@ -92,7 +101,22 @@ function HoldingRow({ holding, category, onUpdate, onRemove, onToggleTag, holdin
   );
 }
 
-export default function Holdings({ holdings, addHolding, updateHolding, removeHolding, toggleTag, holdingValue, holdingCost }) {
+export default function Holdings({ holdings, addHolding, updateHolding, removeHolding, toggleTag, holdingValue, holdingCost, focusCategory, onFocusHandled }) {
+  useEffect(() => {
+    if (!focusCategory) return;
+    const el = document.getElementById(`cat-${focusCategory}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el.classList.add(styles.flash);
+      const t = setTimeout(() => {
+        el.classList.remove(styles.flash);
+        onFocusHandled?.();
+      }, 1800);
+      return () => clearTimeout(t);
+    }
+    onFocusHandled?.();
+  }, [focusCategory, onFocusHandled]);
+
   return (
     <div className={styles.container}>
       <div className={styles.legend}>
@@ -103,6 +127,7 @@ export default function Holdings({ holdings, addHolding, updateHolding, removeHo
 
       {CATEGORIES.map(cat => {
         const items = holdings.filter(h => h.category === cat.id);
+        const owned = items.filter(h => (h.shares || 0) > 0).length;
         const totalVal = items.reduce((a, h) => {
           const c = CATEGORIES.find(x => x.id === h.category);
           const v = (h.shares || 0) * (h.price || 0);
@@ -115,13 +140,15 @@ export default function Holdings({ holdings, addHolding, updateHolding, removeHo
         }, 0);
 
         return (
-          <div key={cat.id} className={styles.catBlock}>
+          <div key={cat.id} id={`cat-${cat.id}`} className={styles.catBlock}>
             <div className={styles.catHead}>
               <div className={styles.catTitle}>
                 <span className={styles.catDot} style={{ background: cat.color }} />
                 <span className={styles.catName}>{cat.name}</span>
                 <span className={styles.catCurrency}>({cat.currency})</span>
-                <span className={styles.catCount}>{items.length}</span>
+                <span className={styles.catCount} title={`${owned} owned, ${items.length} on the list (watchlist items have quantity 0)`}>
+                  {owned} owned / {items.length}
+                </span>
               </div>
               <div className={styles.catRight}>
                 {items.length > 0 && (
@@ -138,12 +165,12 @@ export default function Holdings({ holdings, addHolding, updateHolding, removeHo
 
             {items.length > 0 && (
               <div className={styles.tableHead}>
-                <div className={styles.nameCol}>Ticker / Name / Tags</div>
-                <div className={styles.numInput}>Qty</div>
-                <div className={styles.numInput}>Avg Cost</div>
-                <div className={styles.numInput}>Current</div>
-                <div className={styles.numInput}>Value</div>
-                <div className={styles.numInput}>P/L %</div>
+                <div className={styles.nameCol} title="The investment's code on the exchange, its name, and strategy tags.">Ticker / Name / Tags</div>
+                <div className={styles.numInput} title={COL_HINTS.qty}>Qty</div>
+                <div className={styles.numInput} title={COL_HINTS.cost}>Avg Cost</div>
+                <div className={styles.numInput} title={COL_HINTS.price}>Current</div>
+                <div className={styles.numInput} title={COL_HINTS.value}>Value</div>
+                <div className={styles.numInput} title={COL_HINTS.pnl}>P/L %</div>
                 <div style={{width:24}}></div>
               </div>
             )}

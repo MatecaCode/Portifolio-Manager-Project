@@ -14,7 +14,13 @@ const TABS = [
 
 export default function App() {
   const [tab, setTab] = useState('overview')
+  const [focusCat, setFocusCat] = useState(null)
   const p = usePortfolio()
+
+  const goToCategory = (catId) => {
+    setFocusCat(catId)
+    setTab('holdings')
+  }
 
   if (!p.ready) {
     return (
@@ -40,8 +46,8 @@ export default function App() {
         ))}
       </nav>
       <main>
-        {tab === 'overview'  && <Overview  holdings={p.holdings} categoryTotals={p.categoryTotals} holdingValue={p.holdingValue} holdingCost={p.holdingCost} fxRate={p.fxRate} setFxRate={p.updateFxRate} />}
-        {tab === 'holdings'  && <Holdings  holdings={p.holdings} addHolding={p.addHolding} updateHolding={p.updateHolding} removeHolding={p.removeHolding} toggleTag={p.toggleTag} holdingValue={p.holdingValue} holdingCost={p.holdingCost} priceErrors={p.priceErrors} />}
+        {tab === 'overview'  && <Overview  holdings={p.holdings} categoryTotals={p.categoryTotals} holdingValue={p.holdingValue} holdingCost={p.holdingCost} fxRate={p.fxRate} setFxRate={p.updateFxRate} onCategoryClick={goToCategory} />}
+        {tab === 'holdings'  && <Holdings  holdings={p.holdings} addHolding={p.addHolding} updateHolding={p.updateHolding} removeHolding={p.removeHolding} toggleTag={p.toggleTag} holdingValue={p.holdingValue} holdingCost={p.holdingCost} priceErrors={p.priceErrors} focusCategory={focusCat} onFocusHandled={() => setFocusCat(null)} />}
         {tab === 'rebalance' && <Rebalance holdings={p.holdings} targets={p.targets} categoryTotals={p.categoryTotals} updateTarget={p.updateTarget} holdingValue={p.holdingValue} />}
       </main>
     </div>
