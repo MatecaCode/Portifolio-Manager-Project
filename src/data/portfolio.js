@@ -56,6 +56,39 @@ export const DEFAULT_TARGETS = {
   br_stocks: 11, fii: 11, renda_fixa: 25, us_stocks: 20, intl: 23, crypto: 10,
 };
 
+// Plain-English explanations shown when clicking a ticker.
+// link: where to read more / see the live quote.
+export const TICKER_INFO = {
+  PRIO3:  { title: 'PRIO (PetroRio)', text: 'Brazil\'s largest independent oil company. It buys mature oil fields from bigger companies and squeezes more production out of them at low cost. A FinClass pick.', link: 'https://www.google.com/finance/quote/PRIO3:BVMF' },
+  GMAT3:  { title: 'Grupo Mateus', text: 'A large supermarket and wholesale chain from the Northeast of Brazil, one of the fastest-growing food retailers in the country. A FinClass pick.', link: 'https://www.google.com/finance/quote/GMAT3:BVMF' },
+  WIZC3:  { title: 'Wiz Co', text: 'A Brazilian insurance broker — it earns commissions selling insurance through bank branches and partner channels. A FinClass pick.', link: 'https://www.google.com/finance/quote/WIZC3:BVMF' },
+  XPML11: { title: 'XP Malls', text: 'A real estate fund (FII) that owns stakes in premium shopping malls across Brazil. You earn monthly rent income from the mall tenants.', link: 'https://www.google.com/finance/quote/XPML11:BVMF' },
+  CPTS11: { title: 'Capitânia Securities II', text: 'A real estate fund (FII) that invests mostly in real-estate debt papers (CRIs) — it earns interest instead of rent. Pays monthly income.', link: 'https://www.google.com/finance/quote/CPTS11:BVMF' },
+  PSEC11: { title: 'Pátria Securities', text: 'A real estate fund (FII) from asset manager Pátria that invests in real-estate debt (CRIs), paying monthly interest income.', link: 'https://www.google.com/finance/quote/PSEC11:BVMF' },
+  PVBI11: { title: 'VBI Prime Properties', text: 'A real estate fund (FII) that owns high-end office buildings in São Paulo\'s best districts and collects rent from corporate tenants.', link: 'https://www.google.com/finance/quote/PVBI11:BVMF' },
+  'CDB-DAYCOVAL': { title: 'CDB Daycoval / BTG 104% CDI', text: 'A bank deposit certificate — you lend money to the bank and earn 104% of Brazil\'s base interest rate (CDI). Very low risk, protected by FGC insurance up to R$250k.', link: null },
+  JURO11: { title: 'Sparta Infra (JURO11)', text: 'A fund that holds Brazilian infrastructure bonds (debêntures incentivadas). The interest is tax-free for individuals. Quantity here = amount in reais invested.', link: 'https://www.google.com/finance/quote/JURO11:BVMF' },
+  'TESOURO-IPCA-2050': { title: 'Tesouro IPCA+ 2050', text: 'A Brazilian government bond that pays inflation (IPCA) plus a fixed rate until 2050. The safest investment in Brazil — backed by the National Treasury.', link: 'https://www.tesourodireto.com.br' },
+  FIXA11: { title: 'ETF FIXA11 / IDKA11', text: 'An exchange-traded fund that tracks a basket of Brazilian fixed-income (interest rate) bonds. A simple way to own renda fixa through the stock exchange.', link: 'https://www.google.com/finance/quote/FIXA11:BVMF' },
+  WRLD11: { title: 'WRLD11 (world stocks wrapper)', text: 'A Brazilian ETF that wraps Vanguard\'s VT fund — one purchase gives you a slice of thousands of companies across the whole world. Trades in reais on B3.', link: 'https://www.google.com/finance/quote/WRLD11:BVMF' },
+  USDB11: { title: 'USDB11 (US bonds wrapper)', text: 'A Brazilian ETF that wraps Vanguard\'s BND fund — a broad basket of US bonds. A defensive, dollar-linked investment that trades in reais on B3.', link: 'https://www.google.com/finance/quote/USDB11:BVMF' },
+  'ACE-CAP': { title: 'ACE Capital', text: 'A Brazilian multimercado (hedge) fund — professional managers trade rates, currencies and stocks aiming to beat the CDI. No live price feed; quantity = reais invested.', link: null },
+  GENOA:  { title: 'Genoa Capital Radar', text: 'A Brazilian multimercado (hedge) fund from Genoa Capital. Like ACE, it has no public live price — quantity = reais invested, updated by hand.', link: null },
+  CEG:    { title: 'Constellation Energy', text: 'The largest producer of carbon-free (mostly nuclear) electricity in the US. The bet: AI data centers need massive clean power. Part of the Energy thesis.', link: 'https://www.google.com/finance/quote/CEG:NASDAQ' },
+  VRT:    { title: 'Vertiv', text: 'Makes the cooling and power equipment that keeps data centers running. A direct "picks and shovels" play on the AI buildout. Part of the Energy thesis.', link: 'https://www.google.com/finance/quote/VRT:NYSE' },
+  BE:     { title: 'Bloom Energy', text: 'Builds fuel-cell systems that generate electricity on-site — popular with data centers that can\'t wait for grid connections. Part of the Energy thesis.', link: 'https://www.google.com/finance/quote/BE:NYSE' },
+  BTC:    { title: 'Bitcoin', text: 'The first and largest cryptocurrency — digital money with a fixed supply of 21 million coins, often treated as "digital gold".', link: 'https://www.coingecko.com/en/coins/bitcoin' },
+  ETH:    { title: 'Ethereum', text: 'The second-largest crypto. Ethereum is a network where apps and financial contracts run without banks; ETH is the coin that powers it.', link: 'https://www.coingecko.com/en/coins/ethereum' },
+  XRP:    { title: 'XRP', text: 'A cryptocurrency built for fast, cheap cross-border payments between banks and institutions, created by Ripple.', link: 'https://www.coingecko.com/en/coins/xrp' },
+  BNB:    { title: 'BNB', text: 'The coin of the Binance exchange ecosystem — used to pay trading fees at a discount and to run apps on the BNB Chain.', link: 'https://www.coingecko.com/en/coins/bnb' },
+  AVAX:   { title: 'Avalanche', text: 'A newer blockchain network competing with Ethereum on speed and cost; AVAX is its native coin.', link: 'https://www.coingecko.com/en/coins/avalanche-2' },
+};
+
 export const CASH_ACCOUNTS = [
-  { id: 'wealthfront', label: 'Wealthfront (Joint)', value: 12513.43, apy: 4.05, note: 'Emergency fund — Melanie & Matheus' },
+  { id: 'wealthfront',   label: 'Wealthfront (Joint)',        value: 12513.43, apy: 4.05, note: 'Emergency fund — Melanie & Matheus' },
+  { id: 'chase_mat',     label: 'Chase Checking — Matheus',   value: 0, apy: null, note: 'Day-to-day spending' },
+  { id: 'chase_mel',     label: 'Chase Checking — Melanie',   value: 0, apy: null, note: 'Day-to-day spending' },
+  { id: 'fidelity',      label: 'Fidelity',                   value: 0, apy: null, note: 'Brokerage cash' },
+  { id: 'kraken',        label: 'Kraken',                     value: 0, apy: null, note: 'Crypto exchange cash' },
+  { id: 'ibkr',          label: 'Interactive Brokers',        value: 0, apy: null, note: 'Brokerage cash' },
 ];

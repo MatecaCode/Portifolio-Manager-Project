@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { fetchAllPrices } from '../lib/prices'
-import { SEED_HOLDINGS, DEFAULT_TARGETS, CATEGORIES } from '../data/portfolio'
+import { SEED_HOLDINGS, DEFAULT_TARGETS, CATEGORIES, CASH_ACCOUNTS } from '../data/portfolio'
 
 const LS_KEY = 'portfolio_v4'
 
@@ -14,6 +14,7 @@ function lsSave(s) {
 
 export function usePortfolio() {
   const [holdings, setHoldings]       = useState([])
+  const [accounts, setAccounts]       = useState(CASH_ACCOUNTS)
   const [targets, setTargets]         = useState(DEFAULT_TARGETS)
   const [fxRate, setFxRate]           = useState(5.70)
   const [priceStatus, setPriceStatus] = useState('idle')
@@ -37,6 +38,7 @@ export function usePortfolio() {
             .single()
           if (!error && data) {
             setHoldings(data.holdings?.length ? data.holdings : SEED_HOLDINGS)
+            setAccounts(data.accounts?.length ? data.accounts : CASH_ACCOUNTS)
             setTargets(data.targets && Object.keys(data.targets).length ? data.targets : DEFAULT_TARGETS)
             setFxRate(data.fx_rate || 5.70)
             setSyncStatus('synced')
@@ -48,6 +50,7 @@ export function usePortfolio() {
       // Fallback to localStorage
       const saved = lsLoad()
       setHoldings(saved?.holdings?.length ? saved.holdings : SEED_HOLDINGS)
+      setAccounts(saved?.accounts?.length ? saved.accounts : CASH_ACCOUNTS)
       setTargets(saved?.targets || DEFAULT_TARGETS)
       setFxRate(saved?.fxRate || 5.70)
       setSyncStatus('local')
@@ -57,15 +60,15 @@ export function usePortfolio() {
   }, [])
 
   // ── Save debounced ──
-  const persistState = useCallback((h, t, fx) => {
-    lsSave({ holdings: h, targets: t, fxRate: fx })
+  const persistState = useCallback((h, t, fx, acc) => {
+    lsSave({ holdings: h, targets: t, fxRate: fx, accounts: acc })
     if (!supabase) return
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
       setSyncStatus('syncing')
       try {
         const { error } = await supabase.from('portfolio_state').upsert({
-          id: 'shared', holdings: h, targets: t, fx_rate: fx, updated_at: new Date().toISOString()
+          id: 'shared', holdings: h, targets: t, fx_rate: fx, accounts: acc, updated_at: new Date().toISOString()
         })
         setSyncStatus(error ? 'error' : 'synced')
       } catch { setSyncStatus('error') }
@@ -85,12 +88,12 @@ export function usePortfolio() {
         const p = prices[h.ticker?.toUpperCase()]
         return p ? { ...h, price: p.price } : h
       })
-      persistState(updated, targets, fxRate)
+      persistState(updated, targets, fxRate, accounts)
       return updated
     })
     setPriceStatus('live')
     setLastUpdated(new Date())
-  }, [targets, fxRate, persistState])
+  }, [targets, fxRate, accounts, persistState])
 
   // Auto refresh every 60s
   useEffect(() => {
@@ -135,10 +138,10 @@ export function usePortfolio() {
   const addHolding = useCallback(categoryId => {
     setHoldings(prev => {
       const next = [...prev, { id: uid(), category: categoryId, ticker: '', name: '', shares: 0, cost: 0, price: 0, finclass: false, energy: false }]
-      persistState(next, targets, fxRate)
+      persistState(next, targets, fxRate, accounts)
       return next
     })
-  }, [targets, fxRate, persistState])
+  }, [targets, fxRate, accounts, persistState])
 
   const updateHolding = useCallback((id, field, value) => {
     setHoldings(prev => {
@@ -147,33 +150,59 @@ export function usePortfolio() {
         const num = ['shares','cost','price'].includes(field)
         return { ...h, [field]: num ? (parseFloat(value) || 0) : value }
       })
-      persistState(next, targets, fxRate)
+      persistState(next, targets, fxRate, accounts)
       return next
     })
-  }, [targets, fxRate, persistState])
+  }, [targets, fxRate, accounts, persistState])
 
   const removeHolding = useCallback(id => {
-    setHoldings(prev => { const next = prev.filter(h => h.id !== id); persistState(next, targets, fxRate); return next })
-  }, [targets, fxRate, persistState])
+    setHoldings(prev => { const next = prev.filter(h => h.id !== id); persistState(next, targets, fxRate, accounts); return next })
+  }, [targets, fxRate, accounts, persistState])
 
   const toggleTag = useCallback((id, tag) => {
-    setHoldings(prev => { const next = prev.map(h => h.id === id ? { ...h, [tag]: !h[tag] } : h); persistState(next, targets, fxRate); return next })
-  }, [targets, fxRate, persistState])
+    setHoldings(prev => { const next = prev.map(h => h.id === id ? { ...h, [tag]: !h[tag] } : h); persistState(next, targets, fxRate, accounts); return next })
+  }, [targets, fxRate, accounts, persistState])
 
   const updateTarget = useCallback((catId, value) => {
-    setTargets(prev => { const next = { ...prev, [catId]: parseFloat(value) || 0 }; persistState(holdings, next, fxRate); return next })
-  }, [holdings, fxRate, persistState])
+    setTargets(prev => { const next = { ...prev, [catId]: parseFloat(value) || 0 }; persistState(holdings, next, fxRate, accounts); return next })
+  }, [holdings, fxRate, accounts, persistState])
 
   const updateFxRate = useCallback(val => {
     const rate = parseFloat(val) || 5.70
     setFxRate(rate)
-    persistState(holdings, targets, rate)
-  }, [holdings, targets, persistState])
+    persistState(holdings, targets, rate, accounts)
+  }, [holdings, targets, accounts, persistState])
 
   const manualRefresh = useCallback(() => refreshPrices(holdings), [holdings, refreshPrices])
 
+  // ── Cash accounts CRUD ──
+  const addAccount = useCallback(() => {
+    setAccounts(prev => {
+      const next = [...prev, { id: uid(), label: '', note: '', value: 0, apy: null }]
+      persistState(holdings, targets, fxRate, next)
+      return next
+    })
+  }, [holdings, targets, fxRate, persistState])
+
+  const updateAccount = useCallback((id, field, value) => {
+    setAccounts(prev => {
+      const next = prev.map(a => {
+        if (a.id !== id) return a
+        const num = ['value', 'apy'].includes(field)
+        return { ...a, [field]: num ? (parseFloat(value) || 0) : value }
+      })
+      persistState(holdings, targets, fxRate, next)
+      return next
+    })
+  }, [holdings, targets, fxRate, persistState])
+
+  const removeAccount = useCallback(id => {
+    setAccounts(prev => { const next = prev.filter(a => a.id !== id); persistState(holdings, targets, fxRate, next); return next })
+  }, [holdings, targets, fxRate, persistState])
+
   return {
     holdings, targets, fxRate, updateFxRate,
+    accounts, addAccount, updateAccount, removeAccount,
     priceStatus, priceErrors, lastUpdated, syncStatus,
     holdingValue, holdingCost, categoryTotals,
     addHolding, updateHolding, removeHolding, toggleTag,

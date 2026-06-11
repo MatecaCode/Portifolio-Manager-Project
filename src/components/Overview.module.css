@@ -1,69 +1,21 @@
-.container { padding: 24px 32px; max-width: 1100px; margin: 0 auto; }
-
-.cashRow {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-}
-
-.cashCard {
-  flex: 1;
-  min-width: 260px;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.cashLeft { display: flex; align-items: center; gap: 12px; }
-.cashIcon { font-size: 20px; }
-.cashLabel { font-size: 13px; color: var(--text2); margin-bottom: 2px; }
-.cashNote { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; }
-.cashRight { text-align: right; }
-.cashVal { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
-.cashApy { font-size: 11px; color: var(--green); font-family: 'DM Mono', monospace; margin-top: 2px; }
-
-.fxCard {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 140px;
-}
-
-.fxInput {
-  background: var(--bg3);
-  border: 1px solid var(--border2);
-  border-radius: 6px;
-  color: var(--text);
-  padding: 6px 10px;
-  font-size: 16px;
-  font-weight: 600;
-  width: 100%;
-}
-.fxInput:focus { outline: none; border-color: var(--green); }
+.container { padding: 28px 32px 48px; max-width: 1100px; margin: 0 auto; }
 
 .metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
-  margin-bottom: 28px;
+  gap: 14px;
+  margin-bottom: 32px;
 }
 
 .metric {
   background: var(--bg2);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px 18px;
+  border-radius: 16px;
+  padding: 18px 20px;
+  box-shadow: 0 1px 3px rgba(28,33,56,0.05);
+  transition: box-shadow 0.2s, transform 0.2s;
 }
+.metric:hover { box-shadow: 0 4px 12px rgba(28,33,56,0.08); transform: translateY(-1px); }
 
 .metricLabel { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
 .metricVal { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
@@ -92,9 +44,129 @@
 .chartWrap, .legendWrap {
   background: var(--bg2);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 20px;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(28,33,56,0.05);
 }
+
+.accountsSection { margin-bottom: 32px; }
+
+.accountsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.accountsHeadRight { display: flex; align-items: center; gap: 10px; }
+
+.fxChip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text3);
+  font-family: 'DM Mono', monospace;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+  cursor: help;
+}
+.fxChipInput {
+  width: 60px;
+  background: var(--bg3);
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text);
+  padding: 3px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+}
+.fxChipInput:focus { outline: none; border-color: var(--green); }
+
+.addAccountBtn {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  color: var(--text2);
+  transition: all 0.15s;
+}
+.addAccountBtn:hover { border-color: var(--green); color: var(--green); }
+
+.accountsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.accountCard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 36px 14px 18px;
+  box-shadow: 0 1px 3px rgba(28,33,56,0.05);
+}
+
+.accountInfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.accountLabel, .accountNote {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  color: var(--text);
+  width: 100%;
+}
+.accountLabel { font-size: 14px; font-weight: 600; font-family: 'Syne', sans-serif; }
+.accountNote { font-size: 11px; color: var(--text3); }
+.accountLabel:hover, .accountNote:hover { border-color: var(--border); }
+.accountLabel:focus, .accountNote:focus { outline: none; border-color: var(--green); background: var(--bg3); }
+
+.accountRight { text-align: right; flex-shrink: 0; }
+.accountValWrap { display: flex; align-items: center; gap: 2px; justify-content: flex-end; }
+.accountCurrency { color: var(--text3); font-size: 14px; }
+.accountVal {
+  width: 110px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+}
+.accountVal:hover { border-color: var(--border); }
+.accountVal:focus { outline: none; border-color: var(--green); background: var(--bg3); }
+.accountApy { font-size: 11px; color: var(--green); font-family: 'DM Mono', monospace; margin-top: 2px; }
+
+.accountDel {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text3);
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: all 0.15s;
+}
+.accountCard:hover .accountDel { opacity: 1; }
+.accountDel:hover { color: var(--red); background: var(--red-dim); }
 
 .emptyChart {
   height: 240px;

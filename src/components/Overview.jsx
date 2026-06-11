@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import { CATEGORIES, CASH_ACCOUNTS } from '../data/portfolio';
+import { CATEGORIES } from '../data/portfolio';
 import styles from './Overview.module.css';
 
 const fmt = (n) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -30,14 +30,15 @@ const CustomTooltip = ({ active, payload }) => {
   );
 };
 
-export default function Overview({ holdings, categoryTotals, holdingValue, holdingCost, fxRate, setFxRate, onCategoryClick }) {
+export default function Overview({ holdings, categoryTotals, holdingValue, holdingCost, fxRate, setFxRate, onCategoryClick, accounts, addAccount, updateAccount, removeAccount }) {
   const totals = categoryTotals();
   const totalVal = Object.values(totals).reduce((a, t) => a + t.value, 0);
   const totalCost = Object.values(totals).reduce((a, t) => a + t.cost, 0);
   const pnl = totalVal - totalCost;
   const pnlPct = totalCost > 0 ? (pnl / totalCost * 100) : 0;
-  const cashTotal = CASH_ACCOUNTS.reduce((a, c) => a + c.value, 0);
+  const cashTotal = accounts.reduce((a, c) => a + (c.value || 0), 0);
   const netWorth = totalVal + cashTotal;
+  const sortedCategories = [...CATEGORIES].sort((a, b) => totals[b.id].value - totals[a.id].value);
 
   const chartData = useMemo(() =>
     CATEGORIES
@@ -56,37 +57,6 @@ export default function Overview({ holdings, categoryTotals, holdingValue, holdi
 
   return (
     <div className={styles.container}>
-      {/* Cash accounts */}
-      <div className={styles.cashRow}>
-        {CASH_ACCOUNTS.map(acc => (
-          <div key={acc.id} className={styles.cashCard} style={{ cursor: 'help' }}
-            title="Savings set aside for emergencies. It earns interest but is not counted as an investment. Updated by hand — the bank has no automatic connection.">
-            <div className={styles.cashLeft}>
-              <span className={styles.cashIcon}>🏦</span>
-              <div>
-                <p className={styles.cashLabel}>{acc.label}</p>
-                <p className={styles.cashNote}>{acc.note}</p>
-              </div>
-            </div>
-            <div className={styles.cashRight}>
-              <p className={styles.cashVal}>{fmt(acc.value)}</p>
-              <p className={styles.cashApy}>{acc.apy}% APY · Emergency fund</p>
-            </div>
-          </div>
-        ))}
-        <div className={styles.fxCard}
-          title="The exchange rate used to show Brazilian investments in US dollars. Example: 5.70 means 1 dollar = 5.70 reais. You can edit it.">
-          <p className={styles.cashLabel}>USD / BRL</p>
-          <input
-            className={styles.fxInput}
-            type="number"
-            step="0.01"
-            value={fxRate}
-            onChange={e => setFxRate(parseFloat(e.target.value) || 5.70)}
-          />
-        </div>
-      </div>
-
       {/* Metric cards */}
       <div className={styles.metrics}>
         <MetricCard label="Net Worth" value={fmt(netWorth)} sub="investments + cash"
@@ -101,8 +71,8 @@ export default function Overview({ holdings, categoryTotals, holdingValue, holdi
           negative={pnl < 0}
           hint="Profit or Loss: how much your investments have gained (green) or lost (red) compared to what you paid for them."
         />
-        <MetricCard label="Total Cost" value={fmt(totalCost)} mono
-          hint="The total amount of money actually paid for the investments you own." />
+        <MetricCard label="Cash" value={fmt(cashTotal)} sub={`across ${accounts.length} accounts`}
+          hint="Money sitting in bank and brokerage accounts — the emergency fund plus everything in the Accounts list below." />
         <MetricCard label="Holdings" value={ownedCount} sub={`owned · ${holdings.length} on the list`}
           hint="Investments you actually own (quantity above zero). The rest of the list is a watchlist — things planned but not bought yet." />
       </div>
@@ -139,7 +109,7 @@ export default function Overview({ holdings, categoryTotals, holdingValue, holdi
 
         <div className={styles.legendWrap}>
           <p className={styles.sectionTitle}>By category</p>
-          {CATEGORIES.map(c => {
+          {sortedCategories.map(c => {
             const t = totals[c.id];
             const share = totalVal > 0 ? (t.value / totalVal * 100) : 0;
             const catPnl = t.value - t.cost;
@@ -166,6 +136,64 @@ export default function Overview({ holdings, categoryTotals, holdingValue, holdi
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Accounts */}
+      <div className={styles.accountsSection}>
+        <div className={styles.accountsHead}>
+          <p className={styles.sectionTitle} style={{ marginBottom: 0 }}>Accounts · {fmt(cashTotal)} cash</p>
+          <div className={styles.accountsHeadRight}>
+            <label className={styles.fxChip}
+              title="The exchange rate used to show Brazilian investments in US dollars. You can edit it.">
+              USD/BRL
+              <input
+                className={styles.fxChipInput}
+                type="number"
+                step="0.01"
+                value={fxRate}
+                onChange={e => setFxRate(parseFloat(e.target.value) || 5.70)}
+              />
+            </label>
+            <button className={styles.addAccountBtn} onClick={addAccount}>+ Add account</button>
+          </div>
+        </div>
+        <div className={styles.accountsGrid}>
+          {accounts.map(acc => (
+            <div key={acc.id} className={styles.accountCard}>
+              <div className={styles.accountInfo}>
+                <input
+                  className={styles.accountLabel}
+                  value={acc.label}
+                  placeholder="Account name"
+                  onChange={e => updateAccount(acc.id, 'label', e.target.value)}
+                />
+                <input
+                  className={styles.accountNote}
+                  value={acc.note || ''}
+                  placeholder="Note (e.g. emergency fund)"
+                  onChange={e => updateAccount(acc.id, 'note', e.target.value)}
+                />
+              </div>
+              <div className={styles.accountRight}>
+                <div className={styles.accountValWrap}
+                  title="Balances are updated by hand for now — type the current balance here. File import is coming soon.">
+                  <span className={styles.accountCurrency}>$</span>
+                  <input
+                    className={styles.accountVal}
+                    type="number"
+                    step="0.01"
+                    value={acc.value || ''}
+                    placeholder="0.00"
+                    onChange={e => updateAccount(acc.id, 'value', e.target.value)}
+                  />
+                </div>
+                {acc.apy ? <p className={styles.accountApy}>{acc.apy}% APY</p> : null}
+              </div>
+              <button className={styles.accountDel} title="Remove this account"
+                onClick={() => { if (confirm(`Remove "${acc.label || 'this account'}"?`)) removeAccount(acc.id) }}>×</button>
+            </div>
+          ))}
         </div>
       </div>
 

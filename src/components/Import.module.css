@@ -1,0 +1,54 @@
+.container { padding: 28px 32px 48px; max-width: 900px; margin: 0 auto; }
+
+.intro { margin-bottom: 28px; }
+.title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+.text { font-size: 14px; color: var(--text2); max-width: 560px; line-height: 1.5; }
+.soon {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 11px;
+  font-family: 'DM Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--amber);
+  background: rgba(217,130,31,0.1);
+  border: 1px solid rgba(217,130,31,0.25);
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.sourceCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  text-align: left;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(28,33,56,0.05);
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.sourceIcon { font-size: 22px; }
+.sourceName { font-size: 14px; font-weight: 600; color: var(--text); }
+.sourceDetail { font-size: 11px; color: var(--text3); line-height: 1.4; }
+
+.dropZone {
+  border: 2px dashed var(--border2);
+  border-radius: 16px;
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--text3);
+}
+.dropTitle { font-size: 15px; font-weight: 600; color: var(--text2); margin-bottom: 6px; }
+.dropSub { font-size: 12px; max-width: 460px; margin: 0 auto; line-height: 1.5; }
