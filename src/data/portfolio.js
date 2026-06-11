@@ -3,7 +3,7 @@ export const CATEGORIES = [
   { id: 'fii',         name: 'FIIs',               label: 'Fundos Imob.',   color: 'var(--cat-fii)',  currency: 'BRL' },
   { id: 'renda_fixa',  name: 'Renda Fixa',         label: 'Caixa',          color: 'var(--cat-rf)',   currency: 'BRL' },
   { id: 'us_stocks',   name: 'US Stocks',          label: 'S&P / Equity',   color: 'var(--cat-us)',   currency: 'USD' },
-  { id: 'intl',        name: 'International',      label: 'Global',         color: 'var(--cat-intl)', currency: 'USD' },
+  { id: 'intl',        name: 'International',      label: 'Global',         color: 'var(--cat-intl)', currency: 'BRL' },
   { id: 'crypto',      name: 'Crypto',             label: 'Digital Assets', color: 'var(--cat-cry)',  currency: 'USD' },
 ];
 

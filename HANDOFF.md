@@ -133,7 +133,7 @@ updated_at  timestamptz
 | `fii` | FIIs | BRL | Brapi |
 | `renda_fixa` | Renda Fixa | BRL | Manual (price=1, qty=BRL invested) |
 | `us_stocks` | US Stocks | USD | Finnhub |
-| `intl` | International | USD | Manual (WRLD11/USDB11 are BRL-listed but tracked as USD here) |
+| `intl` | International | BRL | Brapi for WRLD11/USDB11 (B3-listed ETFs); ACE-CAP/GENOA manual (price=1, qty=BRL invested) |
 | `crypto` | Crypto | USD | CoinGecko |
 
 All values are converted to USD for the overview total using the stored `fx_rate`.
@@ -154,7 +154,7 @@ All values are converted to USD for the overview total using the stored `fx_rate
 **To add a new US stock:** Just add it to the `us_stocks` category — Finnhub handles any US ticker.  
 **To add a new BR stock/FII:** Just add it to `br_stocks` or `fii` — Brapi handles any B3 ticker.
 
-Auto-refreshes every 60 seconds. Manual refresh via the header button.
+Auto-refreshes every 5 minutes (gentle on free-tier API limits). Manual refresh via the header button.
 
 ---
 
@@ -180,11 +180,11 @@ This means:
 ### Must fix before showing to Melanie
 - [ ] **Supabase SQL not run yet** — table doesn't exist, app runs in local-only mode until done
 - [ ] **Wealthfront balance is hardcoded** — it's `$12,513.43` in `src/data/portfolio.js` → `CASH_ACCOUNTS`. No live API for Wealthfront exists; update manually when balance changes.
-- [ ] **WRLD11/USDB11/ACE/GENOA prices are placeholder (1)** — these are BRL-listed but Brapi doesn't return them with just `WRLD11`. Need to either manually update price or look up their B3 ticker format.
+- [x] **WRLD11/USDB11 now fetched from Brapi** — `intl` category switched to BRL (all four holdings are BRL-denominated Brazilian vehicles). ACE-CAP/GENOA are CVM funds with no public quote API: track them like renda fixa (price=1, qty=BRL invested).
 
 ### Nice to have next
 - [ ] **Transaction history** — right now only tracks current position (shares + avg cost). Adding a `transactions` table in Supabase would let you see individual lots, track buys over time, compute FIFO/LIFO cost basis.
-- [ ] **Mobile layout** — the Holdings table overflows on narrow screens. The grid columns need to collapse on mobile (`grid-template-columns` media query).
+- [x] **Mobile layout** — Holdings rows now collapse to a labeled 3-column card layout below 720px.
 - [ ] **Push notifications** — Vercel cron + Supabase edge function to alert when a holding hits a price target.
 - [ ] **CSV export** — add a button on Holdings tab to download current positions as CSV.
 - [ ] **Melanie's Wealthfront** — the `CASH_ACCOUNTS` array in `portfolio.js` supports multiple accounts. Just add another entry when she connects hers.

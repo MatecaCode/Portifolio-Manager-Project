@@ -6,13 +6,17 @@ const GECKO_IDS = {
   BNB: 'binancecoin', AVAX: 'avalanche-2', SOL: 'solana',
 }
 
-const BR_CATS = ['br_stocks', 'fii', 'renda_fixa', 'intl']
+// renda_fixa is intentionally excluded: price=1, shares=BRL invested.
+// intl is included for B3-listed ETFs (WRLD11/USDB11); ACE-CAP/GENOA are
+// CVM funds with no public quote API — they keep price=1, shares=BRL invested.
+const BR_CATS = ['br_stocks', 'fii', 'intl']
 const US_CATS = ['us_stocks']
+const MANUAL_TICKERS = ['GENOA']
 
 export async function fetchAllPrices(holdings) {
   const prices = {}, errors = {}
   const crypto = holdings.filter(h => h.category === 'crypto')
-  const br     = holdings.filter(h => BR_CATS.includes(h.category) && h.price > 1 && !h.ticker.includes('-'))
+  const br     = holdings.filter(h => BR_CATS.includes(h.category) && h.ticker && !h.ticker.includes('-') && !MANUAL_TICKERS.includes(h.ticker.toUpperCase()))
   const us     = holdings.filter(h => US_CATS.includes(h.category) && h.ticker && !h.ticker.includes('-'))
 
   await Promise.allSettled([

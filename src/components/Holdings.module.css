@@ -106,6 +106,16 @@
 .nameInput { flex: 1; min-width: 80px; }
 .numInput { font-family: 'DM Mono', monospace; font-size: 12px; text-align: right; }
 
+.cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cell .input { width: 100%; }
+.cellLabel {
+  display: none;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text3);
+}
+
 .priceCell { position: relative; display: flex; align-items: center; gap: 4px; }
 .valueCell { color: var(--text2); }
 .pnlCell { font-weight: 500; }
@@ -155,4 +165,25 @@
   font-size: 13px;
   color: var(--text3);
   font-style: italic;
+}
+
+@media (max-width: 720px) {
+  .container { padding: 16px 10px; }
+  .tableHead { display: none; }
+  .row {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px 12px;
+    position: relative;
+    padding: 12px 12px;
+  }
+  .nameCol { grid-column: 1 / -1; padding-right: 30px; }
+  .cellLabel { display: block; }
+  .numInput { text-align: left; }
+  .delBtn {
+    position: absolute;
+    top: 12px;
+    right: 8px;
+    font-size: 18px;
+  }
+  .catHead { padding: 12px 12px; }
 }

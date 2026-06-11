@@ -98,7 +98,7 @@ export function usePortfolio() {
     refreshPrices(holdings)
     priceTimer.current = setInterval(() => {
       setHoldings(h => { refreshPrices(h); return h })
-    }, 60000)
+    }, 300000)
     return () => clearInterval(priceTimer.current)
   }, [ready])
 

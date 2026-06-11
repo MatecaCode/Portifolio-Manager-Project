@@ -38,39 +38,54 @@ function HoldingRow({ holding, category, onUpdate, onRemove, onToggleTag, holdin
         >EN</button>
       </div>
 
-      <input
-        className={`${styles.input} ${styles.numInput}`}
-        type="number"
-        step="any"
-        value={holding.shares || ''}
-        onChange={e => onUpdate(holding.id, 'shares', e.target.value)}
-        placeholder="0"
-      />
-      <input
-        className={`${styles.input} ${styles.numInput}`}
-        type="number"
-        step="any"
-        value={holding.cost || ''}
-        onChange={e => onUpdate(holding.id, 'cost', e.target.value)}
-        placeholder="Avg cost"
-      />
-      <div className={`${styles.numInput} ${styles.priceCell}`}>
+      <div className={styles.cell}>
+        <span className={styles.cellLabel}>Qty</span>
         <input
           className={`${styles.input} ${styles.numInput}`}
           type="number"
           step="any"
-          value={holding.price || ''}
-          onChange={e => onUpdate(holding.id, 'price', e.target.value)}
-          placeholder="Price"
+          value={holding.shares || ''}
+          onChange={e => onUpdate(holding.id, 'shares', e.target.value)}
+          placeholder="0"
         />
-        {isCrypto && <span className={styles.liveTag}>LIVE</span>}
+      </div>
+      <div className={styles.cell}>
+        <span className={styles.cellLabel}>Avg Cost</span>
+        <input
+          className={`${styles.input} ${styles.numInput}`}
+          type="number"
+          step="any"
+          value={holding.cost || ''}
+          onChange={e => onUpdate(holding.id, 'cost', e.target.value)}
+          placeholder="Avg cost"
+        />
+      </div>
+      <div className={styles.cell}>
+        <span className={styles.cellLabel}>Current</span>
+        <div className={`${styles.numInput} ${styles.priceCell}`}>
+          <input
+            className={`${styles.input} ${styles.numInput}`}
+            type="number"
+            step="any"
+            value={holding.price || ''}
+            onChange={e => onUpdate(holding.id, 'price', e.target.value)}
+            placeholder="Price"
+          />
+          {isCrypto && <span className={styles.liveTag}>LIVE</span>}
+        </div>
       </div>
 
-      <div className={`${styles.numInput} ${styles.valueCell}`}>
-        {category.currency} {fmt2(valLocal)}
+      <div className={styles.cell}>
+        <span className={styles.cellLabel}>Value</span>
+        <div className={`${styles.numInput} ${styles.valueCell}`}>
+          {category.currency} {fmt2(valLocal)}
+        </div>
       </div>
-      <div className={`${styles.numInput} ${styles.pnlCell} ${pnlLocal >= 0 ? styles.pos : styles.neg}`}>
-        {fmtPct(pnlPct)}
+      <div className={styles.cell}>
+        <span className={styles.cellLabel}>P/L %</span>
+        <div className={`${styles.numInput} ${styles.pnlCell} ${pnlLocal >= 0 ? styles.pos : styles.neg}`}>
+          {fmtPct(pnlPct)}
+        </div>
       </div>
       <button className={styles.delBtn} onClick={() => onRemove(holding.id)}>×</button>
     </div>
