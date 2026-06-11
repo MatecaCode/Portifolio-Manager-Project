@@ -1,36 +1,29 @@
-import { useMemo } from 'react';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { useEffect, useState } from 'react';
 import { CATEGORIES } from '../data/portfolio';
-import styles from './Overview.module.css';
+import { Card, CatDot, Chip, Donut, ProgressBar, SectionLabel, Term } from './ui';
+import { fmt, fmt0 } from '../lib/format';
 
-const fmt = (n) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const pct = (n) => n.toFixed(1) + '%';
+const GOAL_KEY = 'sg_goal';
+const PEAK_KEY = 'sg_max_networth';
 
-function MetricCard({ label, value, sub, positive, negative, mono, hint }) {
-  return (
-    <div className={styles.metric} title={hint} style={hint ? { cursor: 'help' } : undefined}>
-      <p className={styles.metricLabel}>{label}</p>
-      <p className={`${styles.metricVal} ${positive ? styles.pos : ''} ${negative ? styles.neg : ''} ${mono ? styles.mono : ''}`}>
-        {value}
-      </p>
-      {sub && <p className={styles.metricSub}>{sub}</p>}
-    </div>
-  );
+const DEFAULT_GOAL = { label: 'First $20k together', target: 20000 };
+
+function loadGoal() {
+  try {
+    const g = JSON.parse(localStorage.getItem(GOAL_KEY));
+    if (g && g.label && g.target > 0) return g;
+  } catch { /* fall through */ }
+  return DEFAULT_GOAL;
 }
 
-const CustomTooltip = ({ active, payload }) => {
-  if (!active || !payload?.length) return null;
-  const { name, value, percent } = payload[0];
-  return (
-    <div className={styles.tooltip}>
-      <p className={styles.tooltipName}>{name}</p>
-      <p className={styles.tooltipVal}>{fmt(value)}</p>
-      <p className={styles.tooltipPct}>{pct(percent * 100)}</p>
-    </div>
-  );
-};
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning, you two ☀️';
+  if (h < 18) return 'Good afternoon, you two ☀️';
+  return 'Good evening, you two 🌙';
+}
 
-export default function Overview({ holdings, categoryTotals, holdingValue, holdingCost, fxRate, setFxRate, onCategoryClick, accounts, addAccount, updateAccount, removeAccount }) {
+export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, onCategoryClick, accounts, addAccount, updateAccount, removeAccount }) {
   const totals = categoryTotals();
   const totalVal = Object.values(totals).reduce((a, t) => a + t.value, 0);
   const totalCost = Object.values(totals).reduce((a, t) => a + t.cost, 0);
@@ -38,192 +31,182 @@ export default function Overview({ holdings, categoryTotals, holdingValue, holdi
   const pnlPct = totalCost > 0 ? (pnl / totalCost * 100) : 0;
   const cashTotal = accounts.reduce((a, c) => a + (c.value || 0), 0);
   const netWorth = totalVal + cashTotal;
-  const sortedCategories = [...CATEGORIES].sort((a, b) => totals[b.id].value - totals[a.id].value);
-
-  const chartData = useMemo(() =>
-    CATEGORIES
-      .map(c => ({ id: c.id, name: c.name, value: totals[c.id].value, color: c.color }))
-      .filter(d => d.value > 0),
-    [totals]
-  );
-
   const ownedCount = holdings.filter(h => (h.shares || 0) > 0).length;
-  const fcHoldings = holdings.filter(h => h.finclass);
-  const enHoldings = holdings.filter(h => h.energy);
-  const fcVal = fcHoldings.reduce((a, h) => a + holdingValue(h), 0);
-  const enVal = enHoldings.reduce((a, h) => a + holdingValue(h), 0);
-  const fcCost = fcHoldings.reduce((a, h) => a + holdingCost(h), 0);
-  const enCost = enHoldings.reduce((a, h) => a + holdingCost(h), 0);
+
+  const [goal, setGoal] = useState(loadGoal);
+  const [editingGoal, setEditingGoal] = useState(false);
+  const saveGoal = (g) => {
+    setGoal(g);
+    try { localStorage.setItem(GOAL_KEY, JSON.stringify(g)) } catch { /* ignore */ }
+  };
+  const goalPct = Math.min(100, (netWorth / goal.target) * 100);
+
+  // All-time-high celebration: compare against the highest net worth seen on this device
+  const [peakAtLoad] = useState(() => parseFloat(localStorage.getItem(PEAK_KEY)) || 0);
+  const isRecord = netWorth > 0 && netWorth >= peakAtLoad;
+  useEffect(() => {
+    if (netWorth <= 0) return;
+    const peak = parseFloat(localStorage.getItem(PEAK_KEY)) || 0;
+    if (netWorth > peak) {
+      try { localStorage.setItem(PEAK_KEY, String(netWorth)) } catch { /* ignore */ }
+    }
+  }, [netWorth]);
+
+  const ownedSlices = CATEGORIES
+    .map(c => ({ id: c.id, color: c.color, value: totals[c.id].value }))
+    .filter(s => s.value > 0);
+  const slices = ownedSlices.length ? ownedSlices : [{ id: 'none', color: 'var(--accent-soft)', value: 1 }];
+
+  const sortedCategories = [...CATEGORIES].sort((a, b) => totals[b.id].value - totals[a.id].value);
+  const diversified = slices.length > 1;
 
   return (
-    <div className={styles.container}>
-      {/* Metric cards */}
-      <div className={styles.metrics}>
-        <MetricCard label="Net Worth" value={fmt(netWorth)} sub="investments + cash"
-          hint="Everything you own: all investments plus the emergency fund, shown in US dollars." />
-        <MetricCard label="Investments" value={fmt(totalVal)} sub="excl. emergency fund"
-          hint="The current value of everything invested (stocks, funds, crypto). The emergency fund is not included here." />
-        <MetricCard
-          label="Total P/L"
-          value={(pnl >= 0 ? '+' : '') + fmt(pnl)}
-          sub={(pnlPct >= 0 ? '+' : '') + pct(pnlPct)}
-          positive={pnl >= 0}
-          negative={pnl < 0}
-          hint="Profit or Loss: how much your investments have gained (green) or lost (red) compared to what you paid for them."
-        />
-        <MetricCard label="Cash" value={fmt(cashTotal)} sub={`across ${accounts.length} accounts`}
-          hint="Money sitting in bank and brokerage accounts — the emergency fund plus everything in the Accounts list below." />
-        <MetricCard label="Holdings" value={ownedCount} sub={`owned · ${holdings.length} on the list`}
-          hint="Investments you actually own (quantity above zero). The rest of the list is a watchlist — things planned but not bought yet." />
-      </div>
-
-      {/* Chart + legend */}
-      <div className={styles.chartSection}>
-        <div className={styles.chartWrap}>
-          <p className={styles.sectionTitle}>Allocation</p>
-          {chartData.length === 0 ? (
-            <div className={styles.emptyChart}>Add shares to see allocation</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={80}
-                  outerRadius={120}
-                  paddingAngle={2}
-                  dataKey="value"
-                  onClick={(d) => d?.id && onCategoryClick?.(d.id)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {chartData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} stroke="none" />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
+    <div className="screen">
+      {/* Hero: greeting + net worth + goal */}
+      <Card className="hero">
+        <div>
+          <div className="hero-greeting">{greeting()}</div>
+          {isRecord && (
+            <div className="celebrate-row">
+              <span className="celebrate-chip">🎉 All-time high net worth!</span>
+            </div>
           )}
+          <div className="hero-networth">
+            <Term tip="Everything you own minus everything you owe. Here it's your investments plus your cash.">Net worth</Term>
+            <div className="hero-amount">{fmt(netWorth)}</div>
+          </div>
+          <div>
+            <div className="hero-goal-row">
+              {editingGoal ? (
+                <span className="hero-goal-label">
+                  <input className="goal-edit-input goal-edit-name" value={goal.label}
+                    onChange={e => saveGoal({ ...goal, label: e.target.value })} />
+                  $<input className="goal-edit-input goal-edit-amount" type="number" min="1" value={goal.target}
+                    onChange={e => saveGoal({ ...goal, target: parseFloat(e.target.value) || goal.target })} />
+                  <button className="goal-edit-btn" onClick={() => setEditingGoal(false)}>✓ done</button>
+                </span>
+              ) : (
+                <span className="hero-goal-label">
+                  {goal.label}
+                  <button className="goal-edit-btn" title="Edit your goal" onClick={() => setEditingGoal(true)}>✎</button>
+                </span>
+              )}
+              <span className="hero-goal-pct">{goalPct.toFixed(0)}% there</span>
+            </div>
+            <ProgressBar pct={goalPct} height={10} />
+            <div className="hero-goal-note">
+              {netWorth >= goal.target
+                ? 'Goal reached — time to dream up the next one! 🎉'
+                : <>{fmt0(goal.target - netWorth)} to go — every deposit moves this bar 💪</>}
+            </div>
+          </div>
         </div>
+        <div className="hero-right">
+          <div className="hero-stat">
+            <div className="hs-label"><Term tip="Money currently in stocks, funds and crypto — not counting the emergency fund.">Invested</Term></div>
+            <div className="hs-value">{fmt(totalVal)}</div>
+          </div>
+          <div className="hero-stat">
+            <div className="hs-label"><Term tip="Cash sitting in your bank and brokerage accounts, ready to use or invest.">Cash</Term></div>
+            <div className="hs-value">{fmt(cashTotal)}</div>
+            <div className="hs-sub">across {accounts.length} accounts</div>
+          </div>
+          <div className="hero-stat">
+            <div className="hs-label"><Term tip="Profit or Loss — how much your investments have gained or lost since you bought them. Red days are normal; the long game is what counts.">Profit / Loss</Term></div>
+            <div className={'hs-value ' + (pnl < 0 ? 'down' : 'up')}>{fmt(pnl, { plus: true })}</div>
+            <div className={'hs-sub ' + (pnl < 0 ? 'down' : 'up')}>{(pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1)}%</div>
+          </div>
+        </div>
+      </Card>
 
-        <div className={styles.legendWrap}>
-          <p className={styles.sectionTitle}>By category</p>
-          {sortedCategories.map(c => {
-            const t = totals[c.id];
-            const share = totalVal > 0 ? (t.value / totalVal * 100) : 0;
-            const catPnl = t.value - t.cost;
-            return (
-              <div
-                key={c.id}
-                className={`${styles.legendRow} ${styles.legendClickable}`}
-                onClick={() => onCategoryClick?.(c.id)}
-                title={`Click to see the ${c.name} investments`}
-              >
-                <div className={styles.legendLeft}>
-                  <span className={styles.legendDot} style={{ background: c.color }} />
-                  <div>
-                    <p className={styles.legendName}>{c.name}</p>
-                    <p className={styles.legendSub}>{t.owned} owned · {t.count} listed</p>
+      {/* Allocation + categories */}
+      <div className="two-col">
+        <Card>
+          <SectionLabel right={<Chip>{ownedCount} investments owned</Chip>}>
+            <Term tip="How your invested money is split between different types of investments.">Allocation</Term>
+          </SectionLabel>
+          <div className="alloc-body">
+            <Donut
+              slices={slices}
+              centerTop={fmt0(totalVal)}
+              centerBottom="invested"
+            />
+            <div className="alloc-note">
+              <div className="alloc-legend">
+                {CATEGORIES.map(c => (
+                  <span className="legend-item" key={c.id}><CatDot color={c.color} /> {c.name}</span>
+                ))}
+              </div>
+              <p className="alloc-line">
+                {diversified
+                  ? <>Money spread across {slices.length} categories — the <b>Rebalance</b> tab shows how close you are to the mix you chose. 🦩</>
+                  : <>All eggs in one basket for now — the <b>Rebalance</b> tab has the plan to spread new money around. Every color here is a future win. 🦩</>}
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <SectionLabel>By category</SectionLabel>
+          <div className="cat-list">
+            {sortedCategories.map(c => {
+              const t = totals[c.id];
+              const catPnl = t.value - t.cost;
+              return (
+                <div className="cat-row clickable" key={c.id} onClick={() => onCategoryClick?.(c.id)}
+                  title={`Click to see the ${c.name} investments`}>
+                  <CatDot color={c.color} />
+                  <div className="cat-name">
+                    {c.id === 'fii' ? <span><Term tip="Fundos Imobiliários — Brazilian real-estate funds that pay monthly rent-like income.">{c.name}</Term></span>
+                      : c.id === 'renda_fixa' ? <span><Term tip="Brazil's version of bonds and CDs — steady, predictable interest.">{c.name}</Term></span>
+                      : c.name}
+                    <span className="cat-sub">{t.owned} owned · {t.count} on the list</span>
+                  </div>
+                  <div className="cat-vals">
+                    <div className="cat-value">{fmt(t.value)}</div>
+                    <div className={'cat-pl ' + (t.value === 0 ? 'flat' : catPnl < 0 ? 'down' : catPnl > 0 ? 'up' : 'flat')}>
+                      {t.value === 0 ? 'ready to start' : `${fmt(catPnl, { plus: true })} · ${(t.cost > 0 ? (catPnl / t.cost * 100) : 0).toFixed(1)}%`}
+                    </div>
                   </div>
                 </div>
-                <div className={styles.legendRight}>
-                  <p className={styles.legendVal}>{fmt(t.value)}</p>
-                  <p className={`${styles.legendPnl} ${catPnl >= 0 ? styles.pos : styles.neg}`}>
-                    {catPnl >= 0 ? '+' : ''}{fmt(catPnl)} · {pct(share)}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </Card>
       </div>
 
       {/* Accounts */}
-      <div className={styles.accountsSection}>
-        <div className={styles.accountsHead}>
-          <p className={styles.sectionTitle} style={{ marginBottom: 0 }}>Accounts · {fmt(cashTotal)} cash</p>
-          <div className={styles.accountsHeadRight}>
-            <label className={styles.fxChip}
-              title="The exchange rate used to show Brazilian investments in US dollars. You can edit it.">
-              USD/BRL
-              <input
-                className={styles.fxChipInput}
-                type="number"
-                step="0.01"
-                value={fxRate}
-                onChange={e => setFxRate(parseFloat(e.target.value) || 5.70)}
-              />
-            </label>
-            <button className={styles.addAccountBtn} onClick={addAccount}>+ Add account</button>
-          </div>
-        </div>
-        <div className={styles.accountsGrid}>
-          {accounts.map(acc => (
-            <div key={acc.id} className={styles.accountCard}>
-              <div className={styles.accountInfo}>
-                <input
-                  className={styles.accountLabel}
-                  value={acc.label}
-                  placeholder="Account name"
-                  onChange={e => updateAccount(acc.id, 'label', e.target.value)}
-                />
-                <input
-                  className={styles.accountNote}
-                  value={acc.note || ''}
-                  placeholder="Note (e.g. emergency fund)"
-                  onChange={e => updateAccount(acc.id, 'note', e.target.value)}
-                />
-              </div>
-              <div className={styles.accountRight}>
-                <div className={styles.accountValWrap}
-                  title="Balances are updated by hand for now — type the current balance here. File import is coming soon.">
-                  <span className={styles.accountCurrency}>$</span>
-                  <input
-                    className={styles.accountVal}
-                    type="number"
-                    step="0.01"
-                    value={acc.value || ''}
-                    placeholder="0.00"
-                    onChange={e => updateAccount(acc.id, 'value', e.target.value)}
-                  />
-                </div>
-                {acc.apy ? <p className={styles.accountApy}>{acc.apy}% APY</p> : null}
-              </div>
-              <button className={styles.accountDel} title="Remove this account"
-                onClick={() => { if (confirm(`Remove "${acc.label || 'this account'}"?`)) removeAccount(acc.id) }}>×</button>
+      <SectionLabel right={
+        <span className="acct-tools">
+          <label className="fx-pill" title="The exchange rate used to show Brazilian investments in US dollars. You can edit it.">
+            USD/BRL
+            <input type="number" step="0.01" value={fxRate}
+              onChange={e => setFxRate(parseFloat(e.target.value) || 5.70)} />
+          </label>
+          <button className="btn-soft" type="button" onClick={addAccount}>+ Add account</button>
+        </span>
+      }>Accounts · {fmt(cashTotal)} cash</SectionLabel>
+      <div className="acct-grid">
+        {accounts.map(acc => (
+          <Card className="acct-card" key={acc.id}>
+            <div className="acct-head">
+              <input className="acct-name-input" value={acc.label} placeholder="Account name"
+                onChange={e => updateAccount(acc.id, 'label', e.target.value)} />
+              {acc.apy ? (
+                <Chip tone="up"><Term tip="Annual Percentage Yield — the interest this cash earns in a year, compounding included.">{acc.apy}% APY</Term></Chip>
+              ) : null}
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Tag breakdown */}
-      <div className={styles.tagSection}>
-        <p className={styles.sectionTitle}>Strategy tags</p>
-        <div className={styles.tagCards}>
-          <div className={`${styles.tagCard} ${styles.tagFC}`} style={{ cursor: 'help' }}
-            title="Investments recommended by FinClass, the Brazilian investment education service we follow.">
-            <div className={styles.tagBadge}>FC</div>
-            <div>
-              <p className={styles.tagVal}>{fmt(fcVal)}</p>
-              <p className={styles.tagMeta}>{fcHoldings.length} FinClass picks · {totalVal > 0 ? pct(fcVal / totalVal * 100) : '0%'} of portfolio</p>
-              <p className={`${styles.tagPnl} ${fcVal - fcCost >= 0 ? styles.pos : styles.neg}`}>
-                {fcVal - fcCost >= 0 ? '+' : ''}{fmt(fcVal - fcCost)} P/L
-              </p>
+            <input className="acct-note-input" value={acc.note || ''} placeholder="Note (e.g. emergency fund)"
+              onChange={e => updateAccount(acc.id, 'note', e.target.value)} />
+            <div className="acct-value"
+              title="Balances are updated by hand for now — type the current balance here. File import is coming soon.">
+              $<input className="acct-value-input" type="number" step="0.01" value={acc.value || ''} placeholder="0.00"
+                onChange={e => updateAccount(acc.id, 'value', e.target.value)} />
             </div>
-          </div>
-          <div className={`${styles.tagCard} ${styles.tagEN}`} style={{ cursor: 'help' }}
-            title="Matheus's own picks betting on US energy companies (Constellation, Vertiv, Bloom Energy).">
-            <div className={`${styles.tagBadge} ${styles.tagBadgeEN}`}>EN</div>
-            <div>
-              <p className={styles.tagVal}>{fmt(enVal)}</p>
-              <p className={styles.tagMeta}>{enHoldings.length} Energy picks · {totalVal > 0 ? pct(enVal / totalVal * 100) : '0%'} of portfolio</p>
-              <p className={`${styles.tagPnl} ${enVal - enCost >= 0 ? styles.pos : styles.neg}`}>
-                {enVal - enCost >= 0 ? '+' : ''}{fmt(enVal - enCost)} P/L
-              </p>
-            </div>
-          </div>
-        </div>
+            <button className="acct-del" title="Remove this account"
+              onClick={() => { if (confirm(`Remove "${acc.label || 'this account'}"?`)) removeAccount(acc.id) }}>×</button>
+          </Card>
+        ))}
       </div>
     </div>
   );
