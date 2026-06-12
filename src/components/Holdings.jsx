@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { CATEGORIES, TICKER_INFO, COINGECKO_IDS } from '../data/portfolio';
+import { CATEGORIES, TICKER_INFO } from '../data/portfolio';
+import { hasLiveFeed, lookupTicker } from '../lib/prices';
 import { Card, CatDot, Chip, TagBadge, Term } from './ui';
 
 // Display order from the rebrand handoff: crypto first, then BRL, then USD groups
@@ -13,7 +14,7 @@ function HoldingRow({ holding, category, onUpdate, onRemove, onToggleTag, editMo
   const costLocal = (holding.shares || 0) * (holding.cost || 0);
   const pnlPct = costLocal > 0 ? ((valLocal - costLocal) / costLocal * 100) : 0;
   const owned = (holding.shares || 0) > 0;
-  const isLive = !!COINGECKO_IDS[holding.ticker?.toUpperCase()];
+  const isLive = hasLiveFeed(holding);
   const sym = category.currency === 'BRL' ? 'R$' : '$';
 
   if (editMode) {
@@ -65,6 +66,51 @@ function HoldingRow({ holding, category, onUpdate, onRemove, onToggleTag, editMo
   );
 }
 
+// renda_fixa has no public quote API (CDBs, Tesouro…) — those stay free-form.
+const NO_API_CATS = ['renda_fixa'];
+const TICKER_EXAMPLE = {
+  crypto: 'e.g. SOL', br_stocks: 'e.g. VALE3', fii: 'e.g. HGLG11',
+  us_stocks: 'e.g. AAPL', intl: 'e.g. WRLD11',
+};
+
+function AddHoldingForm({ category, onAdd, onClose }) {
+  const [ticker, setTicker] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (checking) return;
+    setChecking(true);
+    setError(null);
+    const result = await lookupTicker(ticker, category.id);
+    setChecking(false);
+    if (!result.ok) { setError(result.reason); return; }
+    onAdd(category.id, {
+      ticker: result.ticker,
+      name: result.name || '',
+      price: result.price || 0,
+      ...(result.geckoId ? { geckoId: result.geckoId } : {}),
+    });
+    onClose();
+  }
+
+  return (
+    <form className="add-form" onSubmit={submit}>
+      <input className="h-input" style={{ width: 130 }} autoFocus value={ticker}
+        placeholder={TICKER_EXAMPLE[category.id] || 'Ticker'}
+        onChange={e => { setTicker(e.target.value); setError(null); }} />
+      <button className="btn-soft" type="submit" disabled={checking || !ticker.trim()}>
+        {checking ? 'Checking…' : '✓ Verify & add'}
+      </button>
+      <button className="btn-soft" type="button" onClick={onClose}>Cancel</button>
+      <span className={error ? 'add-error' : 'add-hint'}>
+        {error || 'The ticker is checked against the market before it\'s added — the live price comes with it.'}
+      </span>
+    </form>
+  );
+}
+
 function TickerModal({ holding, onClose }) {
   const info = TICKER_INFO[holding.ticker?.toUpperCase()];
   const cat = CATEGORIES.find(c => c.id === holding.category);
@@ -93,6 +139,7 @@ function TickerModal({ holding, onClose }) {
 export default function Holdings({ holdings, addHolding, updateHolding, removeHolding, toggleTag, focusCategory, onFocusHandled }) {
   const [editMode, setEditMode] = useState(false);
   const [infoHolding, setInfoHolding] = useState(null);
+  const [addingCat, setAddingCat] = useState(null);
 
   useEffect(() => {
     if (!focusCategory) return;
@@ -121,7 +168,7 @@ export default function Holdings({ holdings, addHolding, updateHolding, removeHo
           <Chip tone="up">LIVE</Chip> auto-updated price · hover anything dotted to learn
         </span>
         <button className={'btn-soft' + (editMode ? ' on' : '')} type="button"
-          onClick={() => setEditMode(m => !m)}
+          onClick={() => { setEditMode(m => !m); setAddingCat(null); }}
           title="Most numbers update automatically — turn editing on only when you've bought or sold something.">
           {editMode ? '✓ Done editing' : '✎ Edit holdings'}
         </button>
@@ -151,7 +198,14 @@ export default function Holdings({ holdings, addHolding, updateHolding, removeHo
               <Chip title={`${owned} owned, ${items.length} on the list (watchlist items have quantity 0)`}>
                 {owned} owned / {items.length}
               </Chip>
-              {editMode && <button className="btn-soft" style={{ padding: '4px 12px', fontSize: 12.5 }} onClick={() => addHolding(cat.id)}>+ Add</button>}
+              {editMode && (
+                <button className="btn-soft" style={{ padding: '4px 12px', fontSize: 12.5 }}
+                  onClick={() => NO_API_CATS.includes(cat.id)
+                    ? addHolding(cat.id)
+                    : setAddingCat(c => (c === cat.id ? null : cat.id))}>
+                  + Add
+                </button>
+              )}
               <span className="hold-total">
                 <span className="mono">{sym}{totalVal.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
                 <span className={'mono ' + (totalPnl < 0 ? 'down' : totalPnl > 0 ? 'up' : 'flat')}>
@@ -188,6 +242,10 @@ export default function Holdings({ holdings, addHolding, updateHolding, removeHo
                 <p className="hold-empty">No holdings yet — turn on editing to add one.</p>
               )}
             </div>
+
+            {editMode && addingCat === cat.id && (
+              <AddHoldingForm category={cat} onAdd={addHolding} onClose={() => setAddingCat(null)} />
+            )}
           </Card>
         );
       })}

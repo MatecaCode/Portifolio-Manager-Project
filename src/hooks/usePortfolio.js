@@ -135,9 +135,9 @@ export function usePortfolio() {
   // ── CRUD ──
   const uid = () => 'h_' + Math.random().toString(36).slice(2, 9)
 
-  const addHolding = useCallback(categoryId => {
+  const addHolding = useCallback((categoryId, data = {}) => {
     setHoldings(prev => {
-      const next = [...prev, { id: uid(), category: categoryId, ticker: '', name: '', shares: 0, cost: 0, price: 0, finclass: false, energy: false }]
+      const next = [...prev, { id: uid(), category: categoryId, ticker: '', name: '', shares: 0, cost: 0, price: 0, finclass: false, energy: false, ...data }]
       persistState(next, targets, fxRate, accounts)
       return next
     })
