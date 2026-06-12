@@ -23,3 +23,22 @@ insert into portfolio_state (id)
 
 -- Verify it worked:
 select * from portfolio_state;
+
+-- ── Budget platform (applied 2026-06-12 as migration create_budget_state) ──
+-- Single shared JSON-blob row, same pattern as portfolio_state.
+create table if not exists budget_state (
+  id           text primary key default 'shared',
+  accounts     jsonb not null default '[]',
+  statements   jsonb not null default '[]',
+  transactions jsonb not null default '[]',
+  budgets      jsonb not null default '{}',
+  updated_at   timestamptz default now()
+);
+
+alter table budget_state enable row level security;
+
+create policy "allow all"
+  on budget_state for all
+  using (true) with check (true);
+
+insert into budget_state (id) values ('shared') on conflict do nothing;

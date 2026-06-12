@@ -138,3 +138,59 @@ with publishable key — acceptable for a 2-person household app).
 - He says "thin class" sometimes in voice transcription — it means FinClass
 - Repo name has a typo he's kept: "Portifolio" — don't "fix" it, it matches
   the GitHub/Vercel project names
+
+## Budget Companion (planned — placeholder shipped June 2026)
+
+A second "platform" living next to the portfolio: same SunnyHeron brand, warm
+"Honey" palette instead of Sea Glass, toggled via the 📊 Portfolio / 💸 Budget
+switch in the header (next to the sync chip). Portfolio = what we keep;
+Budget = what we spend.
+
+**The vision (Matheus's words, paraphrased):** take a Chase credit card or
+account statement and break the expenses into a clean, fun budgeting view —
+detail when we want it, plus category sections showing where the most money
+goes, and recommendations on how to decrease expenses next month. Must be fun,
+not plain. Also needs a way to set up a budget if we want a goal to aim for.
+
+**Planned flow:**
+1. Drop in a Chase statement (CSV or PDF) — no bank logins, file-only
+2. Auto-categorize every transaction into emoji categories
+   (🏠 Home, 🛒 Groceries, 🌮 Dining out, 🎢 Fun & travel, 🚗 Transport,
+   📺 Subscriptions, 🧺 Everything else) with learnable merchant rules and
+   one-tap re-filing
+3. Monthly recap: spent vs budget per category, donut breakdown, and a
+   "Coach's corner" with painless ways to cut spending (over-budget nudges,
+   unused-subscription hunting, savings-to-portfolio framing)
+4. Budget goals: per-category caps or one monthly cap, with live progress bars
+   and playful reward framing ("stay under and the difference funds taco night")
+
+**Reference apps (successful cases to borrow from):**
+- **YNAB** — every dollar gets a job (zero-based budgeting)
+- **Copilot Money** — delightful auto-categorization, best-in-class fun design
+- **Monarch Money** — shared finances built for couples
+- **Rocket Money** — unused-subscription detection and cancellation nudges
+
+**Current state (June 2026): functional v1.** PDF import works end-to-end:
+- `src/lib/statements.js` — pdf.js (v4, kept for older-browser compat) extracts
+  text in the browser (file never leaves the page); regex parsers for Chase
+  credit card (ACCOUNT ACTIVITY) and Chase checking (TRANSACTION DETAIL)
+  formats. Gotchas handled: double-spaced headers, detached minus signs
+  ("- 25.00"), Dec→Jan billing cycles, multi-line FX descriptions.
+- `src/data/budget.js` — 11 emoji categories + ordered merchant rules
+  (H-E-B PHARMACY→health before H-E-B→groceries, UBER EATS before UBER, etc.)
+- `src/hooks/useBudget.js` — Supabase `budget_state` shared-row sync (table
+  applied as migration `create_budget_state`), localStorage fallback.
+- Duplicate detection: statement-level (same account + closing date blocked)
+  and transaction-level (account+date+amount+description key).
+- Transfers (card payments, savings moves) are excluded from spending so the
+  same dollar never counts twice; checking deposits tracked as income.
+- UI: import preview before save, per-account profiles (rename inline,
+  tap to include/exclude, "Combine all"), month picker, category drill-down
+  with per-transaction recategorize, total + per-category budgets,
+  data-driven Coach's corner, statement list with undo-import.
+- Verified against real statements: card ···7448 reconciles to the penny
+  ($2,792.04 = purchases + fee − refund); checking ···9269 all 29 rows.
+
+**Next ideas:** merchant-rule learning from manual recategorizations, more
+bank formats (Wealthfront cash, CSV fallback), monthly recap story like the
+Growth tab, subscription/recurring detection view, budget rollover.

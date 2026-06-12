@@ -1,6 +1,11 @@
 import { Chip } from './ui'
 
-export default function Header({ priceStatus, syncStatus, lastUpdated, onRefresh }) {
+const MODES = [
+  { id: 'portfolio', label: '📊 Portfolio' },
+  { id: 'budget',    label: '💸 Budget'    },
+]
+
+export default function Header({ priceStatus, syncStatus, lastUpdated, onRefresh, mode, setMode }) {
   const timeStr = lastUpdated ? lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null
 
   const priceLabel = {
@@ -25,16 +30,27 @@ export default function Header({ priceStatus, syncStatus, lastUpdated, onRefresh
         </div>
       </div>
       <div className="topbar-right">
+        <div className="platform-switch" title="Switch between the investing side (Portfolio) and the spending side (Budget).">
+          {MODES.map(m => (
+            <button key={m.id} type="button"
+              className={'platform-btn' + (mode === m.id ? ' active' : '')}
+              onClick={() => setMode(m.id)}>
+              {m.label}
+            </button>
+          ))}
+        </div>
         {syncStatus !== 'local' && (
           <Chip tone={syncStatus === 'error' ? 'warn' : 'soft'}
             title="Whether your changes are saved to the cloud, so both of you see the same data on any device.">
             {syncLabel}
           </Chip>
         )}
-        <button className="chip chip-up chip-btn" onClick={onRefresh}
-          title="Prices update automatically every 5 minutes. Click any time to refresh them now.">
-          {priceLabel}
-        </button>
+        {mode !== 'budget' && (
+          <button className="chip chip-up chip-btn" onClick={onRefresh}
+            title="Prices update automatically every 5 minutes. Click any time to refresh them now.">
+            {priceLabel}
+          </button>
+        )}
       </div>
     </header>
   )
