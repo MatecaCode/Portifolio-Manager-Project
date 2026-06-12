@@ -75,8 +75,28 @@ main { display: block; }
 }
 .brand-name { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
 .brand-sub { font-size: 12.5px; color: var(--muted); margin-top: -2px; }
-.topbar-right { display: flex; gap: 8px; }
+.topbar-right { display: flex; gap: 8px; align-items: center; }
 .chip-btn { border: none; }
+
+/* ---------- platform switch (Portfolio ⇄ Budget) ---------- */
+.platform-switch {
+  display: inline-flex; gap: 3px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px;
+  box-shadow: var(--shadow);
+}
+.platform-btn {
+  border: none; background: transparent;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px; font-weight: 600;
+  color: var(--muted);
+  transition: all 0.18s ease;
+}
+.platform-btn:hover { color: var(--ink); background: var(--accent-faint); }
+.platform-btn.active { background: var(--accent); color: #fff; box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 35%, transparent); }
 
 /* ---------- tabs ---------- */
 .tabs {
@@ -498,7 +518,36 @@ main { display: block; }
 .dropzone-title { font-weight: 700; font-size: 17px; margin-bottom: 4px; }
 .dropzone p { font-size: 13.5px; color: var(--muted); max-width: 480px; margin: 0 auto; }
 
+/* ---------- budget mode (warm "Honey" sibling theme) ---------- */
+/* Same Sea Glass bones, but toggling to Budget swaps the palette to a warm
+   sunrise so it instantly feels like its own little platform. */
+body[data-mode="budget"] {
+  --bg: #FBF6ED;
+  --line: #F0E3CD;
+  --ink: #3D3122;
+  --muted: #A38A61;
+  --accent: #E8A03E;
+  --accent-soft: #FAEDD4;
+  --accent-faint: #FCF6E9;
+  --accent-deep: #BC7E1E;
+  --shadow: 0 1px 2px rgba(61,49,34,0.04), 0 4px 16px rgba(61,49,34,0.05);
+  background: var(--bg);
+}
+html:has(body[data-mode="budget"]) { background: #FBF6ED; }
+body[data-mode="budget"] .brand-mark { background: linear-gradient(145deg, #E8A03E, #C77F2A); }
+body[data-mode="budget"] .brand-sun { background: #FFF3D6; }
+
+/* ---------- budget screen ---------- */
+.budget-cat-emoji { font-size: 19px; width: 30px; text-align: center; flex-shrink: 0; }
+.budget-cat-bar { width: 200px; flex-shrink: 0; }
+.budget-step-title { font-weight: 700; font-size: 14.5px; margin-bottom: 3px; }
+.budget-donut-wrap { align-items: center; }
+.budget-dropzone { padding: 26px 22px; }
+.budget-credits { font-size: 13px; color: var(--muted); text-align: center; padding: 4px 0 8px; }
+
 @media (max-width: 980px) {
+  .budget-cat-bar { width: 110px; }
+
   .hero, .two-col { grid-template-columns: 1fr; }
   .story-grid { grid-template-columns: 1fr; }
   .hero-right { border-left: none; padding-left: 0; border-top: 1px solid var(--line); padding-top: 18px; flex-direction: row; flex-wrap: wrap; gap: 24px; }

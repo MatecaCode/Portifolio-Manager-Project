@@ -138,3 +138,40 @@ with publishable key — acceptable for a 2-person household app).
 - He says "thin class" sometimes in voice transcription — it means FinClass
 - Repo name has a typo he's kept: "Portifolio" — don't "fix" it, it matches
   the GitHub/Vercel project names
+
+## Budget Companion (planned — placeholder shipped June 2026)
+
+A second "platform" living next to the portfolio: same SunnyHeron brand, warm
+"Honey" palette instead of Sea Glass, toggled via the 📊 Portfolio / 💸 Budget
+switch in the header (next to the sync chip). Portfolio = what we keep;
+Budget = what we spend.
+
+**The vision (Matheus's words, paraphrased):** take a Chase credit card or
+account statement and break the expenses into a clean, fun budgeting view —
+detail when we want it, plus category sections showing where the most money
+goes, and recommendations on how to decrease expenses next month. Must be fun,
+not plain. Also needs a way to set up a budget if we want a goal to aim for.
+
+**Planned flow:**
+1. Drop in a Chase statement (CSV or PDF) — no bank logins, file-only
+2. Auto-categorize every transaction into emoji categories
+   (🏠 Home, 🛒 Groceries, 🌮 Dining out, 🎢 Fun & travel, 🚗 Transport,
+   📺 Subscriptions, 🧺 Everything else) with learnable merchant rules and
+   one-tap re-filing
+3. Monthly recap: spent vs budget per category, donut breakdown, and a
+   "Coach's corner" with painless ways to cut spending (over-budget nudges,
+   unused-subscription hunting, savings-to-portfolio framing)
+4. Budget goals: per-category caps or one monthly cap, with live progress bars
+   and playful reward framing ("stay under and the difference funds taco night")
+
+**Reference apps (successful cases to borrow from):**
+- **YNAB** — every dollar gets a job (zero-based budgeting)
+- **Copilot Money** — delightful auto-categorization, best-in-class fun design
+- **Monarch Money** — shared finances built for couples
+- **Rocket Money** — unused-subscription detection and cancellation nudges
+
+**Current state:** `src/components/Budget.jsx` is a full visual placeholder
+with sample data (sample May month, $3,500 budget) so the layout can be felt
+and iterated on before any parsing/storage is wired up. Nothing is functional
+yet by design. Future data likely needs a Supabase `transactions` table +
+category rules table.
