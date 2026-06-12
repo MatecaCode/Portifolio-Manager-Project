@@ -4,7 +4,7 @@ export const CATEGORIES = [
   { id: 'renda_fixa',  name: 'Renda Fixa',         label: 'Caixa',          color: 'var(--cat-rf)',   currency: 'BRL' },
   { id: 'us_stocks',   name: 'US Stocks',          label: 'S&P / Equity',   color: 'var(--cat-us)',   currency: 'USD' },
   { id: 'intl',        name: 'International',      label: 'Global',         color: 'var(--cat-intl)', currency: 'BRL' },
-  { id: 'crypto',      name: 'Crypto',             label: 'Digital Assets', color: 'var(--cat-cry)',  currency: 'USD' },
+  { id: 'crypto',      name: 'Crypto',             label: 'Digital Assets', color: 'var(--cat-crypto)', currency: 'USD' },
 ];
 
 // CoinGecko IDs for auto price fetching

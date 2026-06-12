@@ -1,14 +1,12 @@
 import { CATEGORIES } from '../data/portfolio';
-import styles from './Rebalance.module.css';
+import { Card, CatDot, Chip, ProgressBar, SectionLabel, Term } from './ui';
+import { fmt0 } from '../lib/format';
 
-const pct = n => n.toFixed(1) + '%';
-
-export default function Rebalance({ holdings, targets, categoryTotals, updateTarget, holdingValue }) {
+export default function Rebalance({ targets, categoryTotals, updateTarget }) {
   const totals = categoryTotals();
   const totalVal = Object.values(totals).reduce((a, t) => a + t.value, 0);
   const targetSum = Object.values(targets).reduce((a, b) => a + (parseFloat(b) || 0), 0);
-
-  const fmtUsd = n => '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  const sumOk = Math.abs(targetSum - 100) < 0.1;
 
   // Written advice: biggest gaps first, ignore gaps under 1 percentage point
   const advice = CATEGORIES.map(cat => {
@@ -20,68 +18,65 @@ export default function Rebalance({ holdings, targets, categoryTotals, updateTar
     .sort((a, b) => Math.abs(b.needed) - Math.abs(a.needed));
 
   return (
-    <div className={styles.container}>
-      <div className={styles.header}>
-        <p className={styles.note}>
-          Set your target % per category. The filled bar is your actual allocation; the line marker is your target.
+    <div className="screen">
+      <div className="reb-intro">
+        <p>
+          Set your target % per category. The filled bar is where you <b>are</b>; the little line is where you <b>want to be</b>.
+          {' '}<Term tip="Rebalancing nudges your money back to the mix you chose — usually by directing new deposits to whatever is underweight.">Why rebalance?</Term>
         </p>
-        <div className={`${styles.sumBadge} ${Math.abs(targetSum - 100) < 0.1 ? styles.ok : styles.warn}`}
-          title="Your targets should add up to exactly 100% of the portfolio.">
-          {Math.abs(targetSum - 100) < 0.1 ? '✓' : '⚠'} Targets: {targetSum.toFixed(1)}%
-        </div>
+        <Chip tone={sumOk ? 'up' : 'warn'} title="Your targets should add up to exactly 100% of the portfolio.">
+          {sumOk ? '✓' : '…'} Targets: {targetSum.toFixed(1)}%
+        </Chip>
       </div>
 
-      {/* Current balance at a glance */}
-      <div className={styles.summary}>
-        <p className={styles.summaryTitle}>Where the portfolio is today</p>
+      <Card>
+        <SectionLabel>Where the portfolio is today</SectionLabel>
         {totalVal > 0 ? (
           <>
-            <div className={styles.stackBar} title="Each colored segment is a category's share of the portfolio right now.">
+            <div className="reb-stack" title="Each colored segment is a category's share of the portfolio right now.">
               {CATEGORIES.map(cat => {
                 const share = totals[cat.id].value / totalVal * 100;
                 if (share <= 0) return null;
                 return (
-                  <div key={cat.id} className={styles.stackSeg}
+                  <div key={cat.id} className="reb-stack-seg"
                     style={{ width: `${share}%`, background: cat.color }}
                     title={`${cat.name}: ${share.toFixed(1)}% (target ${parseFloat(targets[cat.id]) || 0}%)`} />
                 );
               })}
             </div>
-            <div className={styles.stackLegend}>
+            <div className="reb-stack-legend">
               {CATEGORIES.filter(c => totals[c.id].value > 0).map(cat => (
-                <span key={cat.id} className={styles.stackLegendItem}>
-                  <span className={styles.dot} style={{ background: cat.color }} />
-                  {cat.name} {(totals[cat.id].value / totalVal * 100).toFixed(1)}%
+                <span key={cat.id} className="legend-item">
+                  <CatDot color={cat.color} /> {cat.name} {(totals[cat.id].value / totalVal * 100).toFixed(1)}%
                 </span>
               ))}
             </div>
-            <div className={styles.adviceBox}>
-              <p className={styles.adviceTitle}>What to do about it</p>
+
+            <SectionLabel>What to do about it</SectionLabel>
+            <div className="reb-advice">
               {advice.length === 0 ? (
-                <p className={styles.adviceLine}>✅ Nicely balanced — every category is within 1% of its target. Nothing to do.</p>
+                <div className="reb-advice-row"><p>✅ Nicely balanced — every category is within 1% of its target. Nothing to do.</p></div>
               ) : (
                 advice.map(({ cat, actual, target, needed }) => (
-                  <p key={cat.id} className={styles.adviceLine}>
-                    {needed > 0 ? '🟢' : '🟠'}{' '}
-                    {needed > 0
-                      ? <><strong>Add about {fmtUsd(needed)} to {cat.name}</strong> — it's {actual.toFixed(1)}% of the portfolio but the target is {target}%.</>
-                      : <><strong>{cat.name} is overweight</strong> — {actual.toFixed(1)}% vs a {target}% target. Either trim about {fmtUsd(needed)}, or simply direct new money to the underweight categories until it evens out.</>}
-                  </p>
+                  <div className="reb-advice-row" key={cat.id}>
+                    <CatDot color={cat.color} size={11} />
+                    <p>
+                      {needed > 0
+                        ? <><b>Add about <span className="mono">{fmt0(needed)}</span> to {cat.name}</b> — {actual.toFixed(1)}% of the portfolio, target is {target}%.</>
+                        : <><b>{cat.name} is overweight</b> — {actual.toFixed(1)}% of the portfolio vs a {target}% target. Either trim about <b className="mono">{fmt0(Math.abs(needed))}</b>, or simply direct new money to the other categories until it evens out.</>}
+                    </p>
+                  </div>
                 ))
               )}
-              {advice.some(a => a.needed < 0) && (
-                <p className={styles.adviceFootnote}>
-                  Tip: for long-term investing, rebalancing with new contributions is usually better than selling — no taxes, no fees.
-                </p>
-              )}
             </div>
+            <p className="reb-tip">Gentle tip: for long-term investing, rebalancing with <b>new deposits</b> usually beats selling — no taxes, no fees, no stress. 🌱</p>
           </>
         ) : (
-          <p className={styles.adviceLine}>Once you own investments (quantity above zero), this section shows your real balance and what to adjust.</p>
+          <p className="reb-tip">Once you own investments (quantity above zero), this section shows your real balance and what to adjust.</p>
         )}
-      </div>
+      </Card>
 
-      <div className={styles.grid}>
+      <div className="reb-grid">
         {CATEGORIES.map(cat => {
           const actual = totalVal > 0 ? (totals[cat.id].value / totalVal * 100) : 0;
           const target = parseFloat(targets[cat.id]) || 0;
@@ -90,67 +85,31 @@ export default function Rebalance({ holdings, targets, categoryTotals, updateTar
           const needed = totalVal > 0 ? (target / 100 * totalVal) - value : 0;
 
           return (
-            <div key={cat.id} className={styles.catCard}>
-              <div className={styles.catTop}>
-                <div className={styles.catName}>
-                  <span className={styles.dot} style={{ background: cat.color }} />
-                  {cat.name}
-                </div>
-                <div className={styles.catTarget}>
+            <Card className="reb-card" key={cat.id}>
+              <div className="reb-card-head">
+                <CatDot color={cat.color} size={10} />
+                <span className="reb-card-name">{cat.name}</span>
+                <label className="reb-target">
                   Target
-                  <input
-                    className={styles.targetInput}
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    max="100"
-                    value={targets[cat.id]}
-                    onChange={e => updateTarget(cat.id, e.target.value)}
-                  />
-                  %
+                  <input type="number" className="reb-input mono" value={targets[cat.id]} min="0" max="100" step="0.5"
+                    onChange={e => updateTarget(cat.id, e.target.value)} /> %
+                </label>
+              </div>
+              <ProgressBar pct={actual} marker={target} height={9} tone={actual > target + 1 ? 'down' : 'accent'} />
+              <div className="reb-axis"><span>0%</span><span>100%</span></div>
+              <div className="reb-stats">
+                <div><div className="rs-label">Actual</div><div className="rs-val mono">{actual.toFixed(1)}%</div></div>
+                <div>
+                  <div className="rs-label"><Term tip="How far you are from the target, in percentage points.">Diff</Term></div>
+                  <div className={'rs-val mono ' + (diff > 1 ? 'down' : 'up')}>{(diff >= 0 ? '+' : '') + diff.toFixed(1)}pp</div>
+                </div>
+                <div><div className="rs-label">Value</div><div className="rs-val mono">{fmt0(value)}</div></div>
+                <div>
+                  <div className="rs-label">{needed >= 0 ? 'Buy' : 'Trim'}</div>
+                  <div className={'rs-val mono ' + (needed >= 0 ? 'up' : 'down')}>{fmt0(Math.abs(needed))}</div>
                 </div>
               </div>
-
-              <div className={styles.barArea}>
-                <div className={styles.barTrack}>
-                  <div
-                    className={styles.barFill}
-                    style={{ width: `${Math.min(actual, 100)}%`, background: cat.color }}
-                  />
-                  <div
-                    className={styles.targetLine}
-                    style={{ left: `${Math.min(target, 100)}%` }}
-                  />
-                </div>
-                <div className={styles.barLabels}>
-                  <span>0%</span>
-                  <span>100%</span>
-                </div>
-              </div>
-
-              <div className={styles.catStats}>
-                <div className={styles.stat}>
-                  <span className={styles.statLabel}>Actual</span>
-                  <span className={styles.statVal}>{pct(actual)}</span>
-                </div>
-                <div className={styles.stat}>
-                  <span className={styles.statLabel}>Diff</span>
-                  <span className={`${styles.statVal} ${Math.abs(diff) < 0.5 ? styles.neutral : diff > 0 ? styles.over : styles.under}`}>
-                    {diff >= 0 ? '+' : ''}{diff.toFixed(1)}pp
-                  </span>
-                </div>
-                <div className={styles.stat}>
-                  <span className={styles.statLabel}>Value</span>
-                  <span className={styles.statVal}>${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
-                </div>
-                <div className={styles.stat}>
-                  <span className={styles.statLabel}>{needed >= 0 ? 'Buy' : 'Trim'}</span>
-                  <span className={`${styles.statVal} ${needed >= 0 ? styles.under : styles.over}`}>
-                    ${Math.abs(needed).toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                  </span>
-                </div>
-              </div>
-            </div>
+            </Card>
           );
         })}
       </div>
