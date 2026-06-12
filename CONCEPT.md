@@ -170,8 +170,27 @@ not plain. Also needs a way to set up a budget if we want a goal to aim for.
 - **Monarch Money** — shared finances built for couples
 - **Rocket Money** — unused-subscription detection and cancellation nudges
 
-**Current state:** `src/components/Budget.jsx` is a full visual placeholder
-with sample data (sample May month, $3,500 budget) so the layout can be felt
-and iterated on before any parsing/storage is wired up. Nothing is functional
-yet by design. Future data likely needs a Supabase `transactions` table +
-category rules table.
+**Current state (June 2026): functional v1.** PDF import works end-to-end:
+- `src/lib/statements.js` — pdf.js (v4, kept for older-browser compat) extracts
+  text in the browser (file never leaves the page); regex parsers for Chase
+  credit card (ACCOUNT ACTIVITY) and Chase checking (TRANSACTION DETAIL)
+  formats. Gotchas handled: double-spaced headers, detached minus signs
+  ("- 25.00"), Dec→Jan billing cycles, multi-line FX descriptions.
+- `src/data/budget.js` — 11 emoji categories + ordered merchant rules
+  (H-E-B PHARMACY→health before H-E-B→groceries, UBER EATS before UBER, etc.)
+- `src/hooks/useBudget.js` — Supabase `budget_state` shared-row sync (table
+  applied as migration `create_budget_state`), localStorage fallback.
+- Duplicate detection: statement-level (same account + closing date blocked)
+  and transaction-level (account+date+amount+description key).
+- Transfers (card payments, savings moves) are excluded from spending so the
+  same dollar never counts twice; checking deposits tracked as income.
+- UI: import preview before save, per-account profiles (rename inline,
+  tap to include/exclude, "Combine all"), month picker, category drill-down
+  with per-transaction recategorize, total + per-category budgets,
+  data-driven Coach's corner, statement list with undo-import.
+- Verified against real statements: card ···7448 reconciles to the penny
+  ($2,792.04 = purchases + fee − refund); checking ···9269 all 29 rows.
+
+**Next ideas:** merchant-rule learning from manual recategorizations, more
+bank formats (Wealthfront cash, CSV fallback), monthly recap story like the
+Growth tab, subscription/recurring detection view, budget rollover.
