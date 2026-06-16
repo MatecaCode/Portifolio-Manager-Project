@@ -32,7 +32,9 @@ export default function App() {
   // balance comes straight from the statements you already import, so it
   // shows up in net worth and updates itself — no second entry by hand.
   // Accounts you deliberately *link* to a named portfolio account are left
-  // out here so the same dollars aren't counted twice.
+  // out here so the same dollars aren't counted twice. Accounts whose
+  // statements predate balance capture surface with a null value (shown as
+  // "needs a re-import") rather than vanishing.
   const { accounts: budgetAccounts, accountBalance } = b
   const derivedCash = useMemo(() =>
     budgetAccounts
@@ -41,8 +43,7 @@ export default function App() {
         id: 'budget:' + a.id, budgetAccountId: a.id,
         label: a.name, note: 'Joint day-to-day · synced from your statements',
         value: accountBalance(a.id), apy: null, source: 'budget',
-      }))
-      .filter(a => a.value != null),
+      })),
     [budgetAccounts, accountBalance])
 
   useEffect(() => { localStorage.setItem('sg_tab', tab) }, [tab])
