@@ -42,7 +42,7 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
   const [openCat, setOpenCat] = useState(null);
   const [editBudgets, setEditBudgets] = useState(false);
   const [editTotal, setEditTotal] = useState(false);
-  const [view, setView] = useState('spending');   // 'spending' | 'cashflow' | 'airbnb'
+  const [view, setView] = useState('cashflow');   // 'cashflow' | 'spending' | 'airbnb'
 
   // ── derived scope ──
   const selectedIds = useMemo(() => {
@@ -239,10 +239,10 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
 
       {hasData && (
         <>
-          {/* spending ⇄ cashflow ⇄ airbnb */}
+          {/* cashflow ⇄ spending ⇄ airbnb */}
           <div className="cf-toggle">
-            <button className={'cf-toggle-btn' + (view === 'spending' ? ' active' : '')} onClick={() => setView('spending')}>🧾 Spending</button>
             <button className={'cf-toggle-btn' + (view === 'cashflow' ? ' active' : '')} onClick={() => setView('cashflow')}>📊 Cashflow</button>
+            <button className={'cf-toggle-btn' + (view === 'spending' ? ' active' : '')} onClick={() => setView('spending')}>🧾 Spending</button>
             <button className={'cf-toggle-btn' + (view === 'airbnb' ? ' active' : '')} onClick={() => setView('airbnb')}>🏡 Airbnb</button>
           </div>
 
