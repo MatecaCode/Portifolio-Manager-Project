@@ -5,6 +5,7 @@ import { BUDGET_CATEGORIES, catById } from '../data/budget';
 import { parseStatementPdf } from '../lib/statements';
 import { useBudget } from '../hooks/useBudget';
 import Cashflow from './Cashflow';
+import Airbnb from './Airbnb';
 
 // The Budget platform — the spending-side sibling of the portfolio.
 // Drop in a Chase card/checking PDF (parsed locally in the browser),
@@ -43,7 +44,7 @@ export default function Budget({ portfolioAccounts = [], syncAccountValue }) {
   const [openCat, setOpenCat] = useState(null);
   const [editBudgets, setEditBudgets] = useState(false);
   const [editTotal, setEditTotal] = useState(false);
-  const [view, setView] = useState('spending');   // 'spending' | 'cashflow'
+  const [view, setView] = useState('spending');   // 'spending' | 'cashflow' | 'airbnb'
 
   // ── derived scope ──
   const selectedIds = useMemo(() => {
@@ -240,15 +241,18 @@ export default function Budget({ portfolioAccounts = [], syncAccountValue }) {
 
       {hasData && (
         <>
-          {/* spending ⇄ cashflow */}
+          {/* spending ⇄ cashflow ⇄ airbnb */}
           <div className="cf-toggle">
             <button className={'cf-toggle-btn' + (view === 'spending' ? ' active' : '')} onClick={() => setView('spending')}>🧾 Spending</button>
             <button className={'cf-toggle-btn' + (view === 'cashflow' ? ' active' : '')} onClick={() => setView('cashflow')}>📊 Cashflow</button>
+            <button className={'cf-toggle-btn' + (view === 'airbnb' ? ' active' : '')} onClick={() => setView('airbnb')}>🏡 Airbnb</button>
           </div>
 
           {view === 'cashflow' && (
             <Cashflow b={b} portfolioAccounts={portfolioAccounts} onLinkChange={handleLinkChange} />
           )}
+
+          {view === 'airbnb' && <Airbnb b={b} />}
 
           {view === 'spending' && (
           <>

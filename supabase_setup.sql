@@ -42,3 +42,11 @@ create policy "allow all"
   using (true) with check (true);
 
 insert into budget_state (id) values ('shared') on conflict do nothing;
+
+-- ── Airbnb / property module (migration add_properties_to_budget_state) ──
+-- properties:     [{ id, name, emoji, state, type, placedInService, purchasePrice, landPct, monthlyPayment, active }]
+-- property_rules: learned merchant→property memory [{ id, key, propertyId, scheduleE }]
+-- Per-transaction attribution (propertyId, scheduleE) lives inside the transactions blob.
+alter table budget_state
+  add column if not exists properties     jsonb not null default '[]',
+  add column if not exists property_rules jsonb not null default '[]';
