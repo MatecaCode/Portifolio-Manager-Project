@@ -64,15 +64,30 @@ untouched; the Airbnb view is a clean carve-out.
 
 1. **Auto-suggest by rules.** Property-scoped rules tag the obvious ones:
    - Mortgage servicer `SERVICEMAC` → `mortgage_interest` (split, see note)
-   - The house's specific utility accounts (the TX electric/water/gas provider
-     and account, distinct from the FL apartment's)
+   - The house's specific utility accounts (e.g. **Octopus Energy**, **Spectrum**),
+     which are distinct from the different FL providers where they now live
    - `AIRBNB` deposits in checking → rental income
    - The house's insurance policy, HOA, lawn/pool service, etc.
-2. **Review queue.** Anything plausibly the house but not certain (Home Depot,
-   a handyman Zelle, a furniture purchase) lands in a "Needs a decision" inbox:
-   tap → House / Personal, pick the Schedule E line.
-3. **Manual override always wins** and is remembered (a learned rule so the same
-   merchant auto-files next time).
+2. **Manual tagging is the primary tool, not a fallback.** Out of hundreds of
+   monthly transactions, only a handful are the Airbnb's (e.g. toilet paper
+   delivered to the house on a personal card). A **one-tap "tag to 🏡 Texas House"**
+   must be available on *any* transaction in the normal budget list, where the user
+   then picks the Schedule E line. Most transactions stay **Personal** (default).
+3. **Merchant-memory learning.** The first time a merchant is tagged to a property
+   (e.g. Octopus Energy → House → Utilities), store a learned rule so **every future
+   transaction from that merchant auto-tags** the same way. Deterministic, instant,
+   reliable — covers the repeating bills (~95% of the recurring case). A **manual
+   tag always wins** and updates the memory.
+4. **Review queue (optional surface).** Transactions an auto-rule *suspects* are the
+   house but isn't sure about can collect in a "Needs a decision" inbox — but the
+   core flow is just tagging from the main list. Most personal spend never appears
+   here.
+
+> 🤖 **On "AI learning."** v1 uses merchant-memory (rule learning), which is
+> deterministic and handles the recurring bills perfectly without any model calls.
+> A genuine LLM-based suggester for fuzzy one-offs (a random handyman Zelle) is a
+> **Phase-4 nicety** layered on top — merchant-memory captures almost all the value
+> first, with no cost or privacy tradeoffs.
 
 > ⚠️ **Mortgage is not one number.** The single **$3,100 `SERVICEMAC` bank line is
 > four things**: principal (~$2,200 P&I minus interest — *not* deductible),
