@@ -171,8 +171,10 @@ Residential rental, reported on **Schedule E (Form 1040)**. We model the real li
 | Insurance | Landlord/STR policy |
 | Legal & professional | Accountant, LLC fees |
 | Management fees | Co-host / property manager |
-| Mortgage interest | Interest portion only (from 1098) |
-| Repairs | Fixes that don't add value (vs. improvements → depreciated) |
+| Mortgage payment | The full PITI bank line (`SERVICEMAC`) — a holding bucket that the tax engine splits into interest (deductible) / principal (not) / escrowed tax & insurance |
+| Mortgage interest | The deductible interest portion only (from the 1098) |
+| Repairs | Fixes that *don't* add value — deducted in full this year |
+| Improvements & work | Capital work (foundation, renovations) — **not expensed; added to basis and depreciated** |
 | Supplies | Consumables, furnishings under threshold |
 | Taxes | **Property tax** + TX hotel tax the host remits |
 | Utilities | The house's electric/water/gas/internet |
