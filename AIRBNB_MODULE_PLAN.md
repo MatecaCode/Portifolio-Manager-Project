@@ -260,13 +260,18 @@ Honey/Sea-Glass theme — no new design language.
 
 ## Phased build plan
 
-| Phase | Scope | Why this order |
+| Phase | Scope | Status |
 |---|---|---|
-| **0 — Foundations** | `properties[]` entity, transaction `propertyId`/`scheduleE`/`attribution` fields, backfill, property switcher shell | Everything else needs the data model |
-| **1 — Attribution** | Rules engine + review queue + learned overrides; Airbnb deposit detection | Get clean, trustworthy property data first |
-| **2 — Airbnb dashboard** | Overview / Revenue / Expenses tabs | The "how's it doing" payoff, on real data |
-| **3 — Tax engine** | Schedule E calc, depreciation, set-aside helper, property-tax tracker, CPA flags + disclaimers | Highest-value, highest-care; build on solid data |
-| **4 — Polish & future** | Airbnb CSV import, projections, occupancy tax tracker, multi-property, reviews/business metrics | Nice-to-haves once the core is trusted |
+| **0 — Foundations** | `properties[]` entity, transaction `propertyId`/`scheduleE` fields, property switcher | ✅ **Built** |
+| **1 — Attribution** | Auto-tag (mortgage + Airbnb deposits), one-tap manual tagging, merchant-memory learning, "find house expenses" search | ✅ **Built** |
+| **2 — Airbnb dashboard** | Net cash-flow hero + expenses-by-Schedule-E breakdown (Revenue/Expenses detail + projections still to come) | ◐ **Partial** (cash-flow P&L live) |
+| **3 — Tax engine** | Schedule E calc, depreciation, set-aside helper, property-tax tracker, CPA flags + disclaimers | ⬜ Next |
+| **4 — Polish & future** | Airbnb CSV import, projections, occupancy tax tracker, multi-property polish, reviews/business metrics | ⬜ Later |
+
+> **Shipped in Phase 0+1:** `src/data/property.js` (Schedule E lines, merchant-memory
+> helpers, defaults), property state + tagging in `src/hooks/useBudget.js`, the
+> `🏡 Airbnb` sub-tab and `src/components/Airbnb.jsx`, and two new synced columns
+> (`properties`, `property_rules`) on `budget_state`.
 
 ---
 

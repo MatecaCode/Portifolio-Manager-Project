@@ -4,6 +4,7 @@ import { fmt, fmt0 } from '../lib/format';
 import { BUDGET_CATEGORIES, catById } from '../data/budget';
 import { parseStatementPdf } from '../lib/statements';
 import { useBudget } from '../hooks/useBudget';
+import Airbnb from './Airbnb';
 
 // The Budget platform — the spending-side sibling of the portfolio.
 // Drop in a Chase card/checking PDF (parsed locally in the browser),
@@ -42,6 +43,7 @@ export default function Budget() {
   const [openCat, setOpenCat] = useState(null);
   const [editBudgets, setEditBudgets] = useState(false);
   const [editTotal, setEditTotal] = useState(false);
+  const [view, setView] = useState('spending');   // 'spending' | 'airbnb'
 
   // ── derived scope ──
   const selectedIds = useMemo(() => {
@@ -180,6 +182,14 @@ export default function Budget() {
         </div>
       </div>
 
+      <div className="platform-switch budget-subnav">
+        <button type="button" className={'platform-btn' + (view === 'spending' ? ' active' : '')} onClick={() => setView('spending')}>💸 Spending</button>
+        <button type="button" className={'platform-btn' + (view === 'airbnb' ? ' active' : '')} onClick={() => setView('airbnb')}>🏡 Airbnb</button>
+      </div>
+
+      {view === 'airbnb' && <Airbnb b={b} />}
+
+      {view === 'spending' && (<>
       {/* pending previews */}
       {pending.map(item => item.error ? (
         <Card key={item.id} className="pending-card">
@@ -428,6 +438,7 @@ export default function Budget() {
           </div>
         </>
       )}
+      </>)}
 
       <p className="budget-credits">
         Borrowing the best ideas from <strong>YNAB</strong> (every dollar gets a job),{' '}
