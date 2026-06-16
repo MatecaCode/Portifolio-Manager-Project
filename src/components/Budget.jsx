@@ -3,7 +3,6 @@ import { Card, Chip, Donut, ProgressBar, SectionLabel, Term } from './ui';
 import { fmt, fmt0 } from '../lib/format';
 import { BUDGET_CATEGORIES, catById } from '../data/budget';
 import { parseStatementPdf } from '../lib/statements';
-import { useBudget } from '../hooks/useBudget';
 import Cashflow from './Cashflow';
 import Airbnb from './Airbnb';
 
@@ -32,8 +31,7 @@ function summarizeParsed(parsed) {
   return { ...n, spend };
 }
 
-export default function Budget({ portfolioAccounts = [], syncAccountValue }) {
-  const b = useBudget();
+export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) {
   const fileRef = useRef(null);
   const [pending, setPending] = useState([]);   // parsed statements awaiting confirm
   const [busy, setBusy] = useState(false);

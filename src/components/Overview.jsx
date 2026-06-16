@@ -23,13 +23,16 @@ function greeting() {
   return 'Good evening, you two 🌙';
 }
 
-export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, onCategoryClick, accounts, addAccount, updateAccount, removeAccount }) {
+export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, onCategoryClick, accounts, derivedAccounts = [], addAccount, updateAccount, removeAccount, onManageBudget }) {
   const totals = categoryTotals();
   const totalVal = Object.values(totals).reduce((a, t) => a + t.value, 0);
   const totalCost = Object.values(totals).reduce((a, t) => a + t.cost, 0);
   const pnl = totalVal - totalCost;
   const pnlPct = totalCost > 0 ? (pnl / totalCost * 100) : 0;
-  const cashTotal = accounts.reduce((a, c) => a + (c.value || 0), 0);
+  const manualCash = accounts.reduce((a, c) => a + (c.value || 0), 0);
+  const derivedCash = derivedAccounts.reduce((a, c) => a + (c.value || 0), 0);
+  const cashTotal = manualCash + derivedCash;
+  const accountCount = accounts.length + derivedAccounts.length;
   const netWorth = totalVal + cashTotal;
   const ownedCount = holdings.filter(h => (h.shares || 0) > 0).length;
 
@@ -109,7 +112,7 @@ export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, 
           <div className="hero-stat">
             <div className="hs-label"><Term tip="Cash sitting in your bank and brokerage accounts, ready to use or invest.">Cash</Term></div>
             <div className="hs-value">{fmt(cashTotal)}</div>
-            <div className="hs-sub">across {accounts.length} accounts</div>
+            <div className="hs-sub">across {accountCount} account{accountCount === 1 ? '' : 's'}</div>
           </div>
           <div className="hero-stat">
             <div className="hs-label"><Term tip="Profit or Loss — how much your investments have gained or lost since you bought them. Red days are normal; the long game is what counts.">Profit / Loss</Term></div>
@@ -187,6 +190,19 @@ export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, 
         </span>
       }>Accounts · {fmt(cashTotal)} cash</SectionLabel>
       <div className="acct-grid">
+        {derivedAccounts.map(acc => (
+          <Card className="acct-card acct-card-linked" key={acc.id}
+            title="This balance comes straight from the statements you import on the Budget side — it updates itself, so there's nothing to type here.">
+            <div className="acct-head">
+              <span className="acct-name-static">🏦 {acc.label}</span>
+              <Chip tone="soft"><Term tip="The closing balance of this account's most recent imported statement. Import a newer one on the Budget tab and this updates automatically.">📄 from statements</Term></Chip>
+            </div>
+            <div className="acct-note-static">{acc.note}</div>
+            <div className="acct-value acct-value-static">{fmt(acc.value || 0)}</div>
+            <button className="acct-manage" type="button" title="Manage statements for this account"
+              onClick={() => onManageBudget?.()}>Manage in Budget →</button>
+          </Card>
+        ))}
         {accounts.map(acc => (
           <Card className="acct-card" key={acc.id}>
             <div className="acct-head">
@@ -199,7 +215,7 @@ export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, 
             <input className="acct-note-input" value={acc.note || ''} placeholder="Note (e.g. emergency fund)"
               onChange={e => updateAccount(acc.id, 'note', e.target.value)} />
             <div className="acct-value"
-              title="Balances are updated by hand for now — type the current balance here. File import is coming soon.">
+              title="Balances are updated by hand for now — type the current balance here, or import a statement on the Budget tab to track a bank account automatically.">
               $<input className="acct-value-input" type="number" step="0.01" value={acc.value || ''} placeholder="0.00"
                 onChange={e => updateAccount(acc.id, 'value', e.target.value)} />
             </div>
