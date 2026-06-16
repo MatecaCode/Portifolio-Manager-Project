@@ -57,7 +57,10 @@ export default function App() {
       />
       {mode === 'budget' ? (
         <main>
-          <Budget />
+          <Budget
+            portfolioAccounts={p.accounts}
+            syncAccountValue={(id, value) => p.updateAccount(id, 'value', value)}
+          />
         </main>
       ) : (
         <>

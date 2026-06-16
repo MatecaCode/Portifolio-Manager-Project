@@ -129,6 +129,8 @@ export function useBudget() {
     const statement = {
       id: uid('st'), key: stKey, accountId: account.id,
       periodStart: parsed.periodStart, periodEnd: parsed.periodEnd,
+      beginningBalance: parsed.beginningBalance ?? null,
+      endingBalance: parsed.endingBalance ?? null,
       fileName: parsed.fileName || '', importedAt: new Date().toISOString(),
     }
     const defaultPropId = properties[0]?.id || null
@@ -150,8 +152,28 @@ export function useBudget() {
     setStatements(nextStatements)
     setTransactions(nextTxs)
     persist(nextAccounts, nextStatements, nextTxs, budgets)
-    return { added: fresh.length, dupes, tagged, accountId: account.id, statementId: statement.id }
+    return {
+      added: fresh.length, dupes, tagged, accountId: account.id, statementId: statement.id,
+      kind: parsed.kind, endingBalance: parsed.endingBalance ?? null, periodEnd: parsed.periodEnd,
+    }
   }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
+
+  // Latest known cash position for an account = ending balance of its most
+  // recent statement. Cards never carry a balance (they owe, they don't hold).
+  const accountBalance = useCallback(accountId => {
+    const sts = statements.filter(s => s.accountId === accountId && s.endingBalance != null)
+    if (!sts.length) return null
+    return sts.reduce((a, s) => (s.periodEnd > a.periodEnd ? s : a)).endingBalance
+  }, [statements])
+
+  // Map a budget account to a portfolio cash account so balances flow over.
+  const linkAccount = useCallback((id, portfolioAccountId) => {
+    setAccounts(prev => {
+      const next = prev.map(a => a.id === id ? { ...a, portfolioAccountId: portfolioAccountId || null } : a)
+      persist(next, statements, transactions, budgets)
+      return next
+    })
+  }, [statements, transactions, budgets, persist])
 
   const renameAccount = useCallback((id, name) => {
     setAccounts(prev => {
@@ -247,5 +269,6 @@ export function useBudget() {
     importStatement, renameAccount, removeStatement, recategorize,
     setTotalBudget, setCategoryBudget,
     addProperty, updateProperty, removeProperty, tagTransaction,
+    accountBalance, linkAccount,
   }
 }

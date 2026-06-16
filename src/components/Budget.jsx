@@ -4,6 +4,7 @@ import { fmt, fmt0 } from '../lib/format';
 import { BUDGET_CATEGORIES, catById } from '../data/budget';
 import { parseStatementPdf } from '../lib/statements';
 import { useBudget } from '../hooks/useBudget';
+import Cashflow from './Cashflow';
 import Airbnb from './Airbnb';
 
 // The Budget platform — the spending-side sibling of the portfolio.
@@ -31,7 +32,7 @@ function summarizeParsed(parsed) {
   return { ...n, spend };
 }
 
-export default function Budget() {
+export default function Budget({ portfolioAccounts = [], syncAccountValue }) {
   const b = useBudget();
   const fileRef = useRef(null);
   const [pending, setPending] = useState([]);   // parsed statements awaiting confirm
@@ -43,7 +44,7 @@ export default function Budget() {
   const [openCat, setOpenCat] = useState(null);
   const [editBudgets, setEditBudgets] = useState(false);
   const [editTotal, setEditTotal] = useState(false);
-  const [view, setView] = useState('spending');   // 'spending' | 'airbnb'
+  const [view, setView] = useState('spending');   // 'spending' | 'cashflow' | 'airbnb'
 
   // ── derived scope ──
   const selectedIds = useMemo(() => {
@@ -136,6 +137,28 @@ export default function Budget() {
     setLastImport(res);
     setSelected(null);
     setMonth(null);
+
+    // Auto-update the linked portfolio cash account with this statement's
+    // closing balance — but only if it's the newest statement we hold for
+    // the account (so re-importing an old month never rolls net worth back).
+    if (res.kind === 'checking' && res.endingBalance != null && syncAccountValue) {
+      const acct = b.accounts.find(a => a.id === res.accountId);
+      const newerExists = b.statements.some(
+        s => s.accountId === res.accountId && s.endingBalance != null && s.periodEnd > res.periodEnd);
+      if (acct?.portfolioAccountId && !newerExists) {
+        syncAccountValue(acct.portfolioAccountId, res.endingBalance);
+      }
+    }
+  }
+
+  // Link a checking account to a portfolio cash account and push its latest
+  // balance over immediately so the two sides agree from the first click.
+  function handleLinkChange(budgetAccountId, portfolioAccountId) {
+    b.linkAccount(budgetAccountId, portfolioAccountId);
+    if (portfolioAccountId && syncAccountValue) {
+      const bal = b.accountBalance(budgetAccountId);
+      if (bal != null) syncAccountValue(portfolioAccountId, bal);
+    }
   }
 
   const toggleAccount = id => {
@@ -182,14 +205,6 @@ export default function Budget() {
         </div>
       </div>
 
-      <div className="platform-switch budget-subnav">
-        <button type="button" className={'platform-btn' + (view === 'spending' ? ' active' : '')} onClick={() => setView('spending')}>💸 Spending</button>
-        <button type="button" className={'platform-btn' + (view === 'airbnb' ? ' active' : '')} onClick={() => setView('airbnb')}>🏡 Airbnb</button>
-      </div>
-
-      {view === 'airbnb' && <Airbnb b={b} />}
-
-      {view === 'spending' && (<>
       {/* pending previews */}
       {pending.map(item => item.error ? (
         <Card key={item.id} className="pending-card">
@@ -226,6 +241,21 @@ export default function Budget() {
 
       {hasData && (
         <>
+          {/* spending ⇄ cashflow ⇄ airbnb */}
+          <div className="cf-toggle">
+            <button className={'cf-toggle-btn' + (view === 'spending' ? ' active' : '')} onClick={() => setView('spending')}>🧾 Spending</button>
+            <button className={'cf-toggle-btn' + (view === 'cashflow' ? ' active' : '')} onClick={() => setView('cashflow')}>📊 Cashflow</button>
+            <button className={'cf-toggle-btn' + (view === 'airbnb' ? ' active' : '')} onClick={() => setView('airbnb')}>🏡 Airbnb</button>
+          </div>
+
+          {view === 'cashflow' && (
+            <Cashflow b={b} portfolioAccounts={portfolioAccounts} onLinkChange={handleLinkChange} />
+          )}
+
+          {view === 'airbnb' && <Airbnb b={b} />}
+
+          {view === 'spending' && (
+          <>
           {/* account profiles + combine */}
           <div>
             <SectionLabel right={
@@ -436,9 +466,10 @@ export default function Budget() {
               )}
             </Card>
           </div>
+          </>
+          )}
         </>
       )}
-      </>)}
 
       <p className="budget-credits">
         Borrowing the best ideas from <strong>YNAB</strong> (every dollar gets a job),{' '}

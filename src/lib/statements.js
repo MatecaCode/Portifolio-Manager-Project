@@ -118,6 +118,7 @@ export function parseCard(rawLines) {
 export function parseChecking(rawLines) {
   const lines = normalize(rawLines)
   let last4 = null, start = null, end = null
+  let beginningBalance = null, endingBalance = null
   const txs = []
   let inDetail = false
 
@@ -132,6 +133,13 @@ export function parseChecking(rawLines) {
         end = new Date(Number(m[6]), mi(m[4]), Number(m[5]))
       }
     }
+    // CHECKING/SAVINGS SUMMARY: capture the statement's cash position.
+    // First match wins so the summary value isn't overwritten by the
+    // identical "Ending Balance" marker at the foot of the detail table.
+    m = line.match(/Beginning Balance\s+\$?(-?[\d,]+\.\d{2})/i)
+    if (m && beginningBalance == null) beginningBalance = parseAmount(m[1])
+    m = line.match(/Ending Balance\s+\$?(-?[\d,]+\.\d{2})/i)
+    if (m && endingBalance == null) endingBalance = parseAmount(m[1])
   }
   if (!start || !end) return null
 
@@ -145,17 +153,25 @@ export function parseChecking(rawLines) {
     if (!m) continue
     const desc = m[2].replace(/\s{2,}/g, ' ').trim()
     const amt = parseAmount(m[3])
+    const bal = parseAmount(m[4])
     const date = iso(resolveDate(m[1], start, end))
 
     if (isTransferDesc(desc)) {
-      txs.push({ date, desc, amount: Math.abs(amt), kind: 'transfer', category: null })
+      txs.push({ date, desc, amount: Math.abs(amt), kind: 'transfer', category: null, balance: bal })
     } else if (amt > 0) {
-      txs.push({ date, desc, amount: amt, kind: 'income', category: null })
+      txs.push({ date, desc, amount: amt, kind: 'income', category: null, balance: bal })
     } else {
-      txs.push({ date, desc, amount: Math.abs(amt), kind: 'expense', category: categorize(desc) })
+      txs.push({ date, desc, amount: Math.abs(amt), kind: 'expense', category: categorize(desc), balance: bal })
     }
   }
-  return { kind: 'checking', last4: last4 || '????', periodStart: iso(start), periodEnd: iso(end), transactions: txs }
+  // Fallback: if the summary line wasn't found, the last transaction's
+  // running balance is the closing cash position.
+  if (endingBalance == null && txs.length) endingBalance = txs[txs.length - 1].balance ?? null
+  return {
+    kind: 'checking', last4: last4 || '????',
+    periodStart: iso(start), periodEnd: iso(end),
+    beginningBalance, endingBalance, transactions: txs,
+  }
 }
 
 // ── Entry point ────────────────────────────────────────────────────
