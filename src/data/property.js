@@ -2,21 +2,27 @@
 // and the merchant-memory helpers that power one-tap tagging + learning.
 // See AIRBNB_MODULE_PLAN.md for the full design.
 
-// Schedule E (Form 1040) deductible-expense lines for a residential rental.
-// Depreciation is computed (not a transaction), so it isn't in this list.
+// Schedule E (Form 1040) deductible-expense lines for a residential rental,
+// plus two practical buckets for this household:
+//   • mortgage      — the full PITI payment (split into interest/escrow at tax time)
+//   • improvements  — capital work (foundation, renovations): NOT expensed, it's
+//                     added to basis and depreciated. Kept distinct from repairs.
+// Depreciation itself is computed (not a transaction), so it isn't in this list.
 export const SCHEDULE_E_CATEGORIES = [
+  { id: 'mortgage',          emoji: '🏠',  name: 'Mortgage payment',       color: '#C9A24B' },
+  { id: 'mortgage_interest', emoji: '🏦',  name: 'Mortgage interest',      color: '#E8A03E' },
+  { id: 'taxes',             emoji: '🏛️',  name: 'Property tax',           color: '#C98B6B' },
+  { id: 'insurance',         emoji: '🛡️',  name: 'Insurance',              color: '#7BB686' },
+  { id: 'utilities',         emoji: '💡',  name: 'Utilities',              color: '#D98BB6' },
+  { id: 'repairs',           emoji: '🔧',  name: 'Repairs',                color: '#E07856' },
+  { id: 'improvements',      emoji: '🔨',  name: 'Improvements & work',    color: '#B5774E' },
+  { id: 'cleaning',          emoji: '🧽',  name: 'Cleaning & maintenance', color: '#3E9B8F' },
+  { id: 'supplies',          emoji: '🧺',  name: 'Supplies',               color: '#A89C8A' },
+  { id: 'commissions',       emoji: '🤝',  name: 'Commissions (host fees)', color: '#8FAE9B' },
+  { id: 'management',        emoji: '🧑‍💼', name: 'Management fees',         color: '#9C8EC9' },
   { id: 'advertising',       emoji: '📣',  name: 'Advertising',            color: '#E5B45E' },
   { id: 'auto_travel',       emoji: '🚗',  name: 'Auto & travel',          color: '#6FA8C9' },
-  { id: 'cleaning',          emoji: '🧽',  name: 'Cleaning & maintenance', color: '#3E9B8F' },
-  { id: 'commissions',       emoji: '🤝',  name: 'Commissions (host fees)', color: '#8FAE9B' },
-  { id: 'insurance',         emoji: '🛡️',  name: 'Insurance',              color: '#7BB686' },
   { id: 'legal',             emoji: '⚖️',  name: 'Legal & professional',   color: '#B0876B' },
-  { id: 'management',        emoji: '🧑‍💼', name: 'Management fees',         color: '#9C8EC9' },
-  { id: 'mortgage_interest', emoji: '🏦',  name: 'Mortgage interest',      color: '#E8A03E' },
-  { id: 'repairs',           emoji: '🔧',  name: 'Repairs',                color: '#E07856' },
-  { id: 'supplies',          emoji: '🧺',  name: 'Supplies',               color: '#A89C8A' },
-  { id: 'taxes',             emoji: '🏛️',  name: 'Property tax',           color: '#C98B6B' },
-  { id: 'utilities',         emoji: '💡',  name: 'Utilities',              color: '#D98BB6' },
   { id: 'other',             emoji: '🧾',  name: 'Other',                  color: '#A8A29A' },
 ]
 
@@ -54,8 +60,10 @@ export function merchantKey(desc) {
 }
 
 // Unmistakable house expenses we can auto-tag on import without asking.
+// The mortgage servicer line is the FULL payment (principal + interest +
+// escrowed tax/insurance) — file it under 'mortgage' and split it at tax time.
 const AUTO_EXPENSE_RULES = [
-  [/SERVICEMAC|MORTGAGE/i, 'mortgage_interest'],
+  [/SERVICEMAC|MORTGAGE/i, 'mortgage'],
 ]
 
 export function suggestScheduleE(desc) {
