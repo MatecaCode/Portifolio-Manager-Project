@@ -74,12 +74,13 @@ untouched; the Airbnb view is a clean carve-out.
 3. **Manual override always wins** and is remembered (a learned rule so the same
    merchant auto-files next time).
 
-> ⚠️ **Mortgage is not one number.** A `SERVICEMAC` payment bundles principal
-> (not deductible), interest (deductible), and often escrowed property tax +
-> insurance (deductible, but in the year actually paid out of escrow). v1 can let
-> the user enter the annual split from the mortgage statement / Form 1098 rather
-> than guess from the bank line. This is the single most important data-quality
-> detail in the whole module.
+> ⚠️ **Mortgage is not one number.** The single **$3,100 `SERVICEMAC` bank line is
+> four things**: principal (~$2,200 P&I minus interest — *not* deductible),
+> interest (deductible), escrowed property tax (deductible), and escrowed insurance
+> (deductible). The engine must split it, not file it as one "home" expense. v1
+> lets the user enter the split from the mortgage statement / Form 1098 / escrow
+> analysis rather than guess from the bank line. This is the single most important
+> data-quality detail in the whole module.
 
 ---
 
@@ -201,8 +202,11 @@ Net rental income (loss) = Gross rents − deductible expenses − depreciation
 ### The set-aside helper
 - Estimate marginal federal rate on **net rental income** (user enters their
   bracket / filing status) → recommend a reserve %.
-- **Property-tax savings tracker:** divide `annualPropertyTax` by 12, show a
-  "build toward the bill" progress bar with an actual reserve balance.
+- **Property-tax handling:** taxes here are **escrowed inside the $3,100 payment**,
+  so the lender already smooths the lumpy bill — no separate "save toward the bill"
+  pot is needed. Instead, **capture the escrowed property tax + insurance as
+  deductible Schedule E expenses.** (Keep the savings-tracker UI available for any
+  future property whose taxes are *not* escrowed.)
 - Everything labeled clearly: **estimates, not tax advice.**
 
 ---
@@ -259,10 +263,15 @@ with real numbers when available; the engine must store them as editable inputs.
 | Input | Value | Notes |
 |---|---|---|
 | Purchase price | **$350,000** (2025) | Was their primary residence before the FL move |
-| Loan amount | **~$280,000 (estimate)** | Assumes 20% down; replace with real balance from statement |
+| Total monthly payment (PITI) | **$3,100/mo** | **Actual** (per Matheus). Bundles P&I + escrowed tax & insurance — must be split |
+| Loan amount | **~$337,500 (estimate)** | ~$10–15k down (NOT 20%); replace with real balance from statement |
 | Mortgage rate | **~6.8% (estimate)** | 2025 TX 30-yr average |
-| Mortgage interest (full yr) | **~$18,900/yr (~$1,575/mo) (estimate)** | Early-amortization years |
-| Mortgage interest deductible 2026 | **~$9,400 (estimate)** | Only the ~6.5 months *after* placed-in-service |
+| P&I portion | **~$2,200/mo (estimate)** | Computed from loan + rate |
+| Escrow portion | **~$900/mo (estimate)** | Remainder of the $3,100 → property tax + insurance |
+| Property tax | **~$7,000/yr (~$580/mo) (estimate)** | TX ≈ 2% of value; **escrowed** (lender pays it) — deductible |
+| Insurance | **~$3,800/yr (~$320/mo) (estimate)** | Landlord/STR policy; **escrowed** — deductible |
+| Mortgage interest (full yr) | **~$22,800/yr (estimate)** | Early-amortization years; only interest is deductible, not principal |
+| Mortgage interest deductible 2026 | **~$12,300 (estimate)** | Only the ~6.5 months *after* placed-in-service |
 | Land / building split | **20% / 80% (estimate)** | Replace with county appraisal "land vs improvement" ratio |
 | Depreciable building basis | **~$280,000 (estimate)** | = 80% of purchase price (coincidentally near the loan amount — unrelated) |
 | Depreciation (full year) | **~$10,180/yr** | $280k ÷ 27.5 |
