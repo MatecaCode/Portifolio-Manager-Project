@@ -193,9 +193,10 @@ Net rental income (loss) = Gross rents − deductible expenses − depreciation
    potential, flagged.
 5. **Texas specifics:** no state income tax (nice), but **property tax** is real
    and lumpy, and **TX hotel occupancy tax (6% state + local)** applies to
-   short-term stays. Airbnb remits the *state* portion in many cases; **local**
-   may be the host's job. Treat occupancy tax as its own tracker, separate from
-   income tax. **Verify what Airbnb actually remits for this listing.**
+   short-term stays. **Confirmed:** Airbnb collects & remits the **6% state** HOT
+   automatically; the **local city/county HOT (1–9%) is the host's responsibility**
+   (register + remit directly). Treat local occupancy tax as its own tracker,
+   separate from income tax. Local rate TBD pending the property's city/county.
 
 ### The set-aside helper
 - Estimate marginal federal rate on **net rental income** (user enters their
@@ -250,14 +251,48 @@ Honey/Sea-Glass theme — no new design language.
 
 ---
 
-## Open questions to settle before Phase 0
+## Known inputs & working assumptions (June 16, 2026)
 
-1. **Mortgage split source** — pull from the annual 1098/escrow statement (recommended) or estimate per-payment? Affects how the `SERVICEMAC` line is handled.
-2. **Property cost basis** — do we have purchase price + a land vs. building split (often from the county appraisal)? Needed for depreciation.
-3. **Placed-in-service date** — when did it first become a rental? Drives year-1 depreciation and which expenses are pre-rental (capitalized) vs deductible.
-4. **Airbnb CSV** — can we export the earnings CSV? If yes, revenue accuracy jumps a lot and we should prioritize that importer.
-5. **Filing status / bracket & active-participation** — needed for the set-aside % and the $25k passive-loss allowance.
-6. **What does Airbnb remit** for this listing (state vs. local occupancy tax)? Determines whether we track a local tax liability.
+Captured from Matheus's answers. Items marked **(estimate)** should be replaced
+with real numbers when available; the engine must store them as editable inputs.
+
+| Input | Value | Notes |
+|---|---|---|
+| Purchase price | **$350,000** (2025) | Was their primary residence before the FL move |
+| Loan amount | **~$280,000 (estimate)** | Assumes 20% down; replace with real balance from statement |
+| Mortgage rate | **~6.8% (estimate)** | 2025 TX 30-yr average |
+| Mortgage interest (full yr) | **~$18,900/yr (~$1,575/mo) (estimate)** | Early-amortization years |
+| Mortgage interest deductible 2026 | **~$9,400 (estimate)** | Only the ~6.5 months *after* placed-in-service |
+| Land / building split | **20% / 80% (estimate)** | Replace with county appraisal "land vs improvement" ratio |
+| Depreciable building basis | **~$280,000 (estimate)** | = 80% of purchase price (coincidentally near the loan amount — unrelated) |
+| Depreciation (full year) | **~$10,180/yr** | $280k ÷ 27.5 |
+| Depreciation (2026, year 1) | **~$5,500** | June placed-in-service → 1.970% mid-month factor |
+| Placed in service | **June 16, 2026** | First guest. Expenses before this date are *not* rental expenses |
+| Owner / filer | **Melanie**, files **single** | House is in her name; couple is not married |
+| Income / bracket | **~$150k → 24% federal marginal** | No TX state income tax; below $200k so no 3.8% NIIT |
+| Federal set-aside guidance | **~24% of net rental *profit*** | $0 in a loss year |
+| State occupancy tax (6%) | **Airbnb collects & remits** | No host action needed |
+| Local occupancy tax (1–9%) | **Host's responsibility** | Must register with city/county & remit; **rate TBD pending property city/county** |
+
+### ⚠️ Passive-loss caveat that changes year-1 strategy
+Melanie's ~$150k income **fully phases out** the $25,000 special allowance for
+deducting rental losses against ordinary income (phaseout runs $100k→$150k MAGI).
+Normally a year-1 loss (likely, with depreciation + partial year + startup) would
+be **suspended and carried forward**, not refunded now.
+
+**However**, because this is a *short-term* rental (avg. guest stay < 7 days), the
+"short-term rental" exception may apply: if the couple **materially participates**,
+losses can be treated as **non-passive** and offset ordinary income. This is a
+real, high-value CPA question for year one — the engine should **flag it, not
+decide it**.
+
+## Remaining open questions
+
+1. **Local occupancy tax** — what city/county is the property in? Needed to look up the local HOT rate + registration. *(Matheus to provide; I'll research the rate.)*
+2. **Mortgage 1098** — replace the estimated interest/principal/escrow split when the statement is available.
+3. **County appraisal land/improvement values** — replace the estimated 20/80 split (drives depreciation accuracy).
+4. **Airbnb earnings CSV** — can it be exported? If yes, prioritize that importer for true gross-rent vs. host-fee data.
+5. **Material participation** — confirm with a CPA whether the STR exception makes year-1 losses currently deductible.
 
 ---
 
