@@ -283,10 +283,12 @@ export function useBudget() {
     let nextRules, nextTxs
     if (on) {
       nextRules = [...propertyRules.filter(r => r.key !== key), { id: uid('rule'), key, action: 'review' }]
-      // pull the merchant's currently-untagged lines into review right away
+      // pull the merchant's lines into review — including ones already tagged to
+      // the property, since flagging "it depends" means every occurrence should
+      // be decided by hand from now on.
       nextTxs = transactions.map(t =>
-        (!t.propertyId && t.kind !== 'transfer' && merchantKey(t.desc) === key)
-          ? { ...t, reviewFlag: true } : t)
+        (t.kind !== 'transfer' && merchantKey(t.desc) === key)
+          ? { ...t, propertyId: null, scheduleE: null, reviewFlag: true } : t)
     } else {
       nextRules = propertyRules.filter(r => !(r.key === key && r.action === 'review'))
       // clear the flag — these go back to normal untagged candidates
