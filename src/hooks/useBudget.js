@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { merchantKey, suggestScheduleE, isAirbnbIncome, guessScheduleE, PROPERTY_DEFAULTS } from '../data/property'
 
 const LS_KEY = 'budget_v1'
 
@@ -18,11 +19,29 @@ const ACCOUNT_DEFAULTS = {
   checking: { emoji: '🏦', label: 'Chase Checking' },
 }
 
+// On import, auto-attribute the obvious house items + anything a learned
+// merchant rule already covers. Everything else stays personal (propertyId null)
+// until the user tags it. Only runs when a property exists to attribute to.
+function attributeTx(tx, defaultPropId, rules) {
+  if (!defaultPropId) return tx
+  if (tx.kind === 'income') {
+    return isAirbnbIncome(tx.desc) ? { ...tx, propertyId: defaultPropId, scheduleE: null } : tx
+  }
+  if (tx.kind !== 'expense') return tx
+  const auto = suggestScheduleE(tx.desc)
+  if (auto) return { ...tx, propertyId: defaultPropId, scheduleE: auto }
+  const rule = rules.find(r => r.key === merchantKey(tx.desc))
+  if (rule) return { ...tx, propertyId: rule.propertyId, scheduleE: rule.scheduleE }
+  return tx
+}
+
 export function useBudget() {
   const [accounts, setAccounts]       = useState([])
   const [statements, setStatements]   = useState([])
   const [transactions, setTransactions] = useState([])
   const [budgets, setBudgets]         = useState({}) // { total: n, perCat: { catId: n } }
+  const [properties, setProperties]   = useState([]) // [{ id, name, emoji, state, ... }]
+  const [propertyRules, setPropertyRules] = useState([]) // learned merchant→property memory
   const [syncStatus, setSyncStatus]   = useState('local')
   const [ready, setReady]             = useState(false)
   const saveTimer = useRef(null)
@@ -40,6 +59,8 @@ export function useBudget() {
             setStatements(data.statements || [])
             setTransactions(data.transactions || [])
             setBudgets(data.budgets || {})
+            setProperties(data.properties || [])
+            setPropertyRules(data.property_rules || [])
             setSyncStatus('synced')
             setReady(true)
             return
@@ -52,6 +73,8 @@ export function useBudget() {
         setStatements(saved.statements || [])
         setTransactions(saved.transactions || [])
         setBudgets(saved.budgets || {})
+        setProperties(saved.properties || [])
+        setPropertyRules(saved.propertyRules || [])
       }
       setSyncStatus('local')
       setReady(true)
@@ -59,8 +82,8 @@ export function useBudget() {
     init()
   }, [])
 
-  const persist = useCallback((acc, sts, txs, bud) => {
-    lsSave({ accounts: acc, statements: sts, transactions: txs, budgets: bud })
+  const persist = useCallback((acc, sts, txs, bud, props = properties, rules = propertyRules) => {
+    lsSave({ accounts: acc, statements: sts, transactions: txs, budgets: bud, properties: props, propertyRules: rules })
     if (!supabase) return
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
@@ -68,12 +91,13 @@ export function useBudget() {
       try {
         const { error } = await supabase.from('budget_state').upsert({
           id: 'shared', accounts: acc, statements: sts, transactions: txs, budgets: bud,
+          properties: props, property_rules: rules,
           updated_at: new Date().toISOString(),
         })
         setSyncStatus(error ? 'error' : 'synced')
       } catch { setSyncStatus('error') }
     }, 800)
-  }, [])
+  }, [properties, propertyRules])
 
   // ── Import a parsed statement. Returns a result summary. ──
   const importStatement = useCallback((parsed, accountName) => {
@@ -105,13 +129,19 @@ export function useBudget() {
     const statement = {
       id: uid('st'), key: stKey, accountId: account.id,
       periodStart: parsed.periodStart, periodEnd: parsed.periodEnd,
+      beginningBalance: parsed.beginningBalance ?? null,
+      endingBalance: parsed.endingBalance ?? null,
       fileName: parsed.fileName || '', importedAt: new Date().toISOString(),
     }
+    const defaultPropId = properties[0]?.id || null
     let dupes = 0
+    let tagged = 0
     const fresh = []
     for (const t of parsed.transactions) {
-      const tx = { ...t, id: uid('tx'), accountId: account.id, statementId: statement.id }
-      if (existing.has(txKey(tx))) { dupes++; continue }
+      const base = { ...t, id: uid('tx'), accountId: account.id, statementId: statement.id, propertyId: null, scheduleE: null }
+      if (existing.has(txKey(base))) { dupes++; continue }
+      const tx = attributeTx(base, defaultPropId, propertyRules)
+      if (tx.propertyId) tagged++
       fresh.push(tx)
     }
     statement.txCount = fresh.length
@@ -122,8 +152,28 @@ export function useBudget() {
     setStatements(nextStatements)
     setTransactions(nextTxs)
     persist(nextAccounts, nextStatements, nextTxs, budgets)
-    return { added: fresh.length, dupes, accountId: account.id, statementId: statement.id }
-  }, [accounts, statements, transactions, budgets, persist])
+    return {
+      added: fresh.length, dupes, tagged, accountId: account.id, statementId: statement.id,
+      kind: parsed.kind, endingBalance: parsed.endingBalance ?? null, periodEnd: parsed.periodEnd,
+    }
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
+
+  // Latest known cash position for an account = ending balance of its most
+  // recent statement. Cards never carry a balance (they owe, they don't hold).
+  const accountBalance = useCallback(accountId => {
+    const sts = statements.filter(s => s.accountId === accountId && s.endingBalance != null)
+    if (!sts.length) return null
+    return sts.reduce((a, s) => (s.periodEnd > a.periodEnd ? s : a)).endingBalance
+  }, [statements])
+
+  // Map a budget account to a portfolio cash account so balances flow over.
+  const linkAccount = useCallback((id, portfolioAccountId) => {
+    setAccounts(prev => {
+      const next = prev.map(a => a.id === id ? { ...a, portfolioAccountId: portfolioAccountId || null } : a)
+      persist(next, statements, transactions, budgets)
+      return next
+    })
+  }, [statements, transactions, budgets, persist])
 
   const renameAccount = useCallback((id, name) => {
     setAccounts(prev => {
@@ -172,10 +222,53 @@ export function useBudget() {
     })
   }, [accounts, statements, transactions, persist])
 
+  // ── properties ──
+  const addProperty = useCallback((partial = {}) => {
+    const prop = { id: uid('prop'), ...PROPERTY_DEFAULTS, ...partial }
+    const next = [...properties, prop]
+    setProperties(next)
+    persist(accounts, statements, transactions, budgets, next, propertyRules)
+    return prop
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
+
+  const updateProperty = useCallback((id, patch) => {
+    const next = properties.map(p => p.id === id ? { ...p, ...patch } : p)
+    setProperties(next)
+    persist(accounts, statements, transactions, budgets, next, propertyRules)
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
+
+  const removeProperty = useCallback(id => {
+    const nextProps = properties.filter(p => p.id !== id)
+    const nextTxs = transactions.map(t => t.propertyId === id ? { ...t, propertyId: null, scheduleE: null } : t)
+    const nextRules = propertyRules.filter(r => r.propertyId !== id)
+    setProperties(nextProps); setTransactions(nextTxs); setPropertyRules(nextRules)
+    persist(accounts, statements, nextTxs, budgets, nextProps, nextRules)
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
+
+  // Tag (or untag) a transaction to a property. Tagging an expense also teaches
+  // the merchant-memory rule so the same vendor auto-files next time.
+  const tagTransaction = useCallback((txId, propertyId, scheduleE) => {
+    const tx = transactions.find(t => t.id === txId)
+    if (!tx) return
+    const resolvedSE = !propertyId ? null
+      : (scheduleE || tx.scheduleE || (tx.kind === 'expense' ? guessScheduleE(tx.category) : null))
+    const nextTxs = transactions.map(t => t.id === txId ? { ...t, propertyId: propertyId || null, scheduleE: resolvedSE } : t)
+    let nextRules = propertyRules
+    if (propertyId && tx.kind === 'expense') {
+      const key = merchantKey(tx.desc)
+      nextRules = [...propertyRules.filter(r => r.key !== key), { id: uid('rule'), key, propertyId, scheduleE: resolvedSE }]
+    }
+    setTransactions(nextTxs)
+    setPropertyRules(nextRules)
+    persist(accounts, statements, nextTxs, budgets, properties, nextRules)
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
+
   return {
     ready, syncStatus,
-    accounts, statements, transactions, budgets,
+    accounts, statements, transactions, budgets, properties, propertyRules,
     importStatement, renameAccount, removeStatement, recategorize,
     setTotalBudget, setCategoryBudget,
+    addProperty, updateProperty, removeProperty, tagTransaction,
+    accountBalance, linkAccount,
   }
 }

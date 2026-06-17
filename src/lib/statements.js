@@ -120,6 +120,7 @@ export function parseCard(rawLines) {
 export function parseChecking(rawLines) {
   const lines = normalize(rawLines)
   let last4 = null, start = null, end = null
+  let beginningBalance = null, endingBalance = null
   const txs = []
   let inDetail = false
 
@@ -134,6 +135,13 @@ export function parseChecking(rawLines) {
         end = new Date(Number(m[6]), mi(m[4]), Number(m[5]))
       }
     }
+    // CHECKING/SAVINGS SUMMARY: capture the statement's cash position.
+    // First match wins so the summary value isn't overwritten by the
+    // identical "Ending Balance" marker at the foot of the detail table.
+    m = line.match(/Beginning Balance\s+\$?(-?[\d,]+\.\d{2})/i)
+    if (m && beginningBalance == null) beginningBalance = parseAmount(m[1])
+    m = line.match(/Ending Balance\s+\$?(-?[\d,]+\.\d{2})/i)
+    if (m && endingBalance == null) endingBalance = parseAmount(m[1])
   }
   if (!start || !end) return null
 
@@ -147,17 +155,25 @@ export function parseChecking(rawLines) {
     if (!m) continue
     const desc = m[2].replace(/\s{2,}/g, ' ').trim()
     const amt = parseAmount(m[3])
+    const bal = parseAmount(m[4])
     const date = iso(resolveDate(m[1], start, end))
 
     if (isTransferDesc(desc)) {
-      txs.push({ date, desc, amount: Math.abs(amt), kind: 'transfer', category: null })
+      txs.push({ date, desc, amount: Math.abs(amt), kind: 'transfer', category: null, balance: bal })
     } else if (amt > 0) {
-      txs.push({ date, desc, amount: amt, kind: 'income', category: null })
+      txs.push({ date, desc, amount: amt, kind: 'income', category: null, balance: bal })
     } else {
-      txs.push({ date, desc, amount: Math.abs(amt), kind: 'expense', category: categorize(desc) })
+      txs.push({ date, desc, amount: Math.abs(amt), kind: 'expense', category: categorize(desc), balance: bal })
     }
   }
-  return { kind: 'checking', last4: last4 || '????', periodStart: iso(start), periodEnd: iso(end), transactions: txs }
+  // Fallback: if the summary line wasn't found, the last transaction's
+  // running balance is the closing cash position.
+  if (endingBalance == null && txs.length) endingBalance = txs[txs.length - 1].balance ?? null
+  return {
+    kind: 'checking', last4: last4 || '????',
+    periodStart: iso(start), periodEnd: iso(end),
+    beginningBalance, endingBalance, transactions: txs,
+  }
 }
 
 // ── CSV ─────────────────────────────────────────────────────────────
@@ -205,11 +221,11 @@ const CSV_TRANSFER_TYPES = new Set(['ACCT_XFER', 'LOAN_PMT'])
 export function parseChaseCheckingCsv(rows, fileName) {
   const header = rows[0].map(h => h.trim().toLowerCase())
   const col = name => header.indexOf(name)
-  const iDate = col('posting date'), iDesc = col('description'), iAmt = col('amount'), iType = col('type')
+  const iDate = col('posting date'), iDesc = col('description'), iAmt = col('amount'), iType = col('type'), iBal = col('balance')
   if (iDate < 0 || iDesc < 0 || iAmt < 0) return null
 
   const txs = []
-  const dates = []
+  const dated = [] // { date, balance, signedAmount } for closing/opening balance
   for (const r of rows.slice(1)) {
     if (!r[iDate] || r[iAmt] == null || r[iAmt] === '') continue
     const amt = parseAmount(r[iAmt])
@@ -217,19 +233,41 @@ export function parseChaseCheckingCsv(rows, fileName) {
     const date = isoFromMDY(r[iDate])
     const desc = (r[iDesc] || '').replace(/\s+/g, ' ').trim()
     const type = (r[iType] || '').trim().toUpperCase()
-    dates.push(date)
+    const bal = iBal >= 0 ? parseAmount(r[iBal]) : NaN
+    const balance = Number.isNaN(bal) ? null : bal
+    dated.push({ date, balance, signedAmount: amt })
 
     if (CSV_TRANSFER_TYPES.has(type)) {
-      txs.push({ date, desc, amount: Math.abs(amt), kind: 'transfer', category: null })
+      txs.push({ date, desc, amount: Math.abs(amt), kind: 'transfer', category: null, balance })
     } else if (amt > 0) {
-      txs.push({ date, desc, amount: amt, kind: 'income', category: null })
+      txs.push({ date, desc, amount: amt, kind: 'income', category: null, balance })
     } else {
-      txs.push({ date, desc, amount: Math.abs(amt), kind: 'expense', category: categorize(desc) })
+      txs.push({ date, desc, amount: Math.abs(amt), kind: 'expense', category: categorize(desc), balance })
     }
   }
   if (!txs.length) return null
-  dates.sort()
-  return { kind: 'checking', last4: last4FromName(fileName), periodStart: dates[0], periodEnd: dates[dates.length - 1], transactions: txs }
+
+  // Chase exports newest-first, so the running Balance column lets us recover
+  // the account's cash position. Rows share a date, so we lean on file order
+  // to break ties: the FIRST row of the newest date is the most recent
+  // transaction (its balance is the closing balance); the LAST row of the
+  // oldest date is the earliest transaction (its balance minus its own amount
+  // is the opening balance). Strict > / <= preserve those first/last picks.
+  const withBal = dated.filter(d => d.balance != null)
+  let beginningBalance = null, endingBalance = null
+  if (withBal.length) {
+    const newest = withBal.reduce((a, d) => (d.date > a.date ? d : a))
+    const oldest = withBal.reduce((a, d) => (d.date <= a.date ? d : a))
+    endingBalance = newest.balance
+    beginningBalance = Math.round((oldest.balance - oldest.signedAmount) * 100) / 100
+  }
+
+  const dates = dated.map(d => d.date).sort()
+  return {
+    kind: 'checking', last4: last4FromName(fileName),
+    periodStart: dates[0], periodEnd: dates[dates.length - 1],
+    beginningBalance, endingBalance, transactions: txs,
+  }
 }
 
 // Chase credit-card CSV: Transaction Date, Post Date, Description, Category, Type, Amount, Memo
