@@ -22,15 +22,27 @@ const ACCOUNT_DEFAULTS = {
 // On import, auto-attribute the obvious house items + anything a learned
 // merchant rule already covers. Everything else stays personal (propertyId null)
 // until the user tags it. Only runs when a property exists to attribute to.
+//
+// Merchant rules come in two flavours:
+//   • a tag rule    { key, propertyId, scheduleE } — auto-files to the property
+//   • a review rule { key, action: 'review' }       — the merchant is ambiguous
+//        (e.g. a family member's Zelle), so instead of guessing, every matching
+//        line is flagged for manual review until the review tag is removed.
 function attributeTx(tx, defaultPropId, rules) {
   if (!defaultPropId) return tx
+  if (tx.kind === 'transfer') return tx
+  const key = merchantKey(tx.desc)
+  // Review rules win: never auto-decide a merchant the user flagged as ambiguous.
+  if (rules.some(r => r.key === key && r.action === 'review')) {
+    return { ...tx, propertyId: null, scheduleE: null, reviewFlag: true }
+  }
   if (tx.kind === 'income') {
     return isAirbnbIncome(tx.desc) ? { ...tx, propertyId: defaultPropId, scheduleE: null } : tx
   }
   if (tx.kind !== 'expense') return tx
   const auto = suggestScheduleE(tx.desc)
   if (auto) return { ...tx, propertyId: defaultPropId, scheduleE: auto }
-  const rule = rules.find(r => r.key === merchantKey(tx.desc))
+  const rule = rules.find(r => r.key === key && r.action !== 'review')
   if (rule) return { ...tx, propertyId: rule.propertyId, scheduleE: rule.scheduleE }
   return tx
 }
@@ -138,7 +150,7 @@ export function useBudget() {
     let tagged = 0
     const fresh = []
     for (const t of parsed.transactions) {
-      const base = { ...t, id: uid('tx'), accountId: account.id, statementId: statement.id, propertyId: null, scheduleE: null }
+      const base = { ...t, id: uid('tx'), accountId: account.id, statementId: statement.id, propertyId: null, scheduleE: null, reviewFlag: false }
       if (existing.has(txKey(base))) { dupes++; continue }
       const tx = attributeTx(base, defaultPropId, propertyRules)
       if (tx.propertyId) tagged++
@@ -263,12 +275,51 @@ export function useBudget() {
     persist(accounts, statements, nextTxs, budgets, properties, nextRules)
   }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
 
+  // Flag (or unflag) a merchant for manual review. While on, the AI stops
+  // auto-deciding that vendor — every matching line lands in the review box
+  // until you remove the tag, at which point normal auto-tagging resumes.
+  const setMerchantReview = useCallback((desc, on) => {
+    const key = merchantKey(desc)
+    let nextRules, nextTxs
+    if (on) {
+      nextRules = [...propertyRules.filter(r => r.key !== key), { id: uid('rule'), key, action: 'review' }]
+      // pull the merchant's currently-untagged lines into review right away
+      nextTxs = transactions.map(t =>
+        (!t.propertyId && t.kind !== 'transfer' && merchantKey(t.desc) === key)
+          ? { ...t, reviewFlag: true } : t)
+    } else {
+      nextRules = propertyRules.filter(r => !(r.key === key && r.action === 'review'))
+      // clear the flag — these go back to normal untagged candidates
+      nextTxs = transactions.map(t =>
+        (t.reviewFlag && merchantKey(t.desc) === key) ? { ...t, reviewFlag: false } : t)
+    }
+    setPropertyRules(nextRules)
+    setTransactions(nextTxs)
+    persist(accounts, statements, nextTxs, budgets, properties, nextRules)
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
+
+  // Resolve a single review line — house or personal — for THIS occurrence only.
+  // Unlike tagTransaction it deliberately learns no rule, so the merchant stays
+  // in review and the next statement's lines come back for another decision.
+  const resolveReview = useCallback((txId, propertyId, scheduleE) => {
+    const tx = transactions.find(t => t.id === txId)
+    if (!tx) return
+    const resolvedSE = !propertyId ? null
+      : (scheduleE || (tx.kind === 'expense' ? guessScheduleE(tx.category) : null))
+    const nextTxs = transactions.map(t => t.id === txId
+      ? { ...t, propertyId: propertyId || null, scheduleE: resolvedSE, reviewFlag: false }
+      : t)
+    setTransactions(nextTxs)
+    persist(accounts, statements, nextTxs, budgets, properties, propertyRules)
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
+
   return {
     ready, syncStatus,
     accounts, statements, transactions, budgets, properties, propertyRules,
     importStatement, renameAccount, removeStatement, recategorize,
     setTotalBudget, setCategoryBudget,
     addProperty, updateProperty, removeProperty, tagTransaction,
+    setMerchantReview, resolveReview,
     accountBalance, linkAccount,
   }
 }
