@@ -9,14 +9,41 @@ import { SCHEDULE_E_CATEGORIES, PROPERTY_DEFAULTS } from '../data/property';
 // commingled statements. Tax math (Schedule E, depreciation) lands next phase.
 // See AIRBNB_MODULE_PLAN.md.
 
+const PER_PAGE = 15;
+
 const monthOf = tx => tx.date.slice(0, 7);
 const monthLabel = ym => new Date(ym + '-15T12:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' });
 const dayLabel = d => `${d.slice(5, 7)}/${d.slice(8, 10)}`;
+
+// Page a list 15 at a time. `resetKey` snaps back to page 1 whenever it changes
+// (e.g. a new search or month) — adjusted during render, the pattern React
+// recommends over an effect — and the page is clamped as the list shrinks.
+function usePaged(items, resetKey, perPage = PER_PAGE) {
+  const [page, setPage] = useState(1);
+  const [prevKey, setPrevKey] = useState(resetKey);
+  if (resetKey !== prevKey) { setPrevKey(resetKey); setPage(1); }
+  const pageCount = Math.max(1, Math.ceil(items.length / perPage));
+  const safe = Math.min(page, pageCount);
+  const slice = items.slice((safe - 1) * perPage, safe * perPage);
+  return { slice, page: safe, pageCount, setPage };
+}
+
+function Pager({ page, pageCount, setPage, total }) {
+  if (pageCount <= 1) return null;
+  return (
+    <div className="airbnb-pager">
+      <button className="btn-soft" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>← Prev</button>
+      <span className="airbnb-pager-label">Page {page} of {pageCount} · {total} total</span>
+      <button className="btn-soft" disabled={page >= pageCount} onClick={() => setPage(p => p + 1)}>Next →</button>
+    </div>
+  );
+}
 
 export default function Airbnb({ b }) {
   const [activeId, setActiveId] = useState(null);
   const [month, setMonth] = useState('all');
   const [query, setQuery] = useState('');
+  const [tagQuery, setTagQuery] = useState('');
 
   const property = b.properties.find(p => p.id === activeId) || b.properties[0] || null;
 
@@ -50,15 +77,31 @@ export default function Airbnb({ b }) {
       .sort((a, z) => z.spent - a.spent);
   }, [expenseTxs]);
 
-  // ── candidates to tag: untagged, non-transfer, matching the search ──
+  // ── tagged rows for this month, searchable ──
+  const taggedRows = useMemo(() => {
+    const q = tagQuery.trim().toLowerCase();
+    return [...scoped]
+      .filter(t => !q || t.desc.toLowerCase().includes(q))
+      .sort((a, z) => z.date.localeCompare(a.date));
+  }, [scoped, tagQuery]);
+
+  // ── lines the AI flagged for manual review (ambiguous merchants) ──
+  const reviewRows = useMemo(
+    () => b.transactions.filter(t => t.reviewFlag).sort((a, z) => z.date.localeCompare(a.date)),
+    [b.transactions]);
+
+  // ── candidates to tag: untagged, non-transfer, not under review, matching search ──
   const untagged = useMemo(() => {
     const q = query.trim().toLowerCase();
     return b.transactions
-      .filter(t => !t.propertyId && t.kind !== 'transfer')
+      .filter(t => !t.propertyId && t.kind !== 'transfer' && !t.reviewFlag)
       .filter(t => !q || t.desc.toLowerCase().includes(q))
-      .sort((a, z) => z.date.localeCompare(a.date))
-      .slice(0, 40);
+      .sort((a, z) => z.date.localeCompare(a.date));
   }, [b.transactions, query]);
+
+  const taggedPaged = usePaged(taggedRows, tagQuery + '|' + activeMonth);
+  const reviewPaged = usePaged(reviewRows, '');
+  const findPaged = usePaged(untagged, query);
 
   // ── empty state: no property yet ──
   if (!property) {
@@ -174,8 +217,11 @@ export default function Airbnb({ b }) {
       {hasData && (
         <Card>
           <SectionLabel right={<Chip tone="soft">{tagged.length} tagged</Chip>}>Tagged to {property.name}</SectionLabel>
+          <input className="airbnb-search" style={{ marginBottom: 8 }}
+            placeholder="Search tagged transactions…"
+            value={tagQuery} onChange={e => setTagQuery(e.target.value)} />
           <div className="cat-expand" style={{ background: 'transparent', border: 'none', padding: 0 }}>
-            {scoped.sort((a, z) => z.date.localeCompare(a.date)).map(t => {
+            {taggedPaged.slice.map(t => {
               const acc = b.accounts.find(a => a.id === t.accountId);
               return (
                 <div className="txrow airbnb-txrow" key={t.id}>
@@ -197,7 +243,46 @@ export default function Airbnb({ b }) {
                 </div>
               );
             })}
+            {!taggedRows.length && <div className="hold-empty">No tagged matches — try another search.</div>}
           </div>
+          <Pager {...taggedPaged} total={taggedRows.length} />
+        </Card>
+      )}
+
+      {/* needs manual review — ambiguous merchants the AI won't auto-decide */}
+      {reviewRows.length > 0 && (
+        <Card>
+          <SectionLabel right={<Chip tone="soft">{reviewRows.length} to review</Chip>}>Needs manual review 🔍</SectionLabel>
+          <p className="reb-tip" style={{ marginBottom: 10 }}>
+            These come from merchants you flagged as “it depends” (like family). The AI
+            won’t guess — decide each one: <strong>House</strong> tags just this line to the
+            property, <strong>Personal</strong> leaves it out. New lines from the same merchant
+            keep landing here until you stop reviewing it.
+          </p>
+          <div className="cat-expand" style={{ background: 'transparent', border: 'none', padding: 0 }}>
+            {reviewPaged.slice.map(t => {
+              const acc = b.accounts.find(a => a.id === t.accountId);
+              return (
+                <div className="txrow airbnb-review-row" key={t.id}>
+                  <span className="mono tx-date">{dayLabel(t.date)}</span>
+                  <span title={acc?.name}>{acc?.emoji}</span>
+                  <span className="tx-desc">{t.desc}</span>
+                  <span className={'mono tx-amt' + (t.kind === 'income' ? ' up' : '')}>{fmt(t.amount)}</span>
+                  <div className="airbnb-review-acts">
+                    <button className="btn-soft on" style={{ padding: '3px 8px', fontSize: 12 }}
+                      title="This one belongs to the property"
+                      onClick={() => b.resolveReview(t.id, property.id)}>🏡 House</button>
+                    <button className="btn-soft" style={{ padding: '3px 8px', fontSize: 12 }}
+                      title="This one is personal — leave it out"
+                      onClick={() => b.resolveReview(t.id, null)}>👤 Personal</button>
+                    <button className="hold-del" title="Stop reviewing this merchant — let the AI tag it normally again"
+                      onClick={() => b.setMerchantReview(t.desc, false)}>✕</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <Pager {...reviewPaged} total={reviewRows.length} />
         </Card>
       )}
 
@@ -212,23 +297,28 @@ export default function Airbnb({ b }) {
         <input className="airbnb-search" placeholder="Search descriptions… e.g. Octopus, Spectrum, Home Depot"
           value={query} onChange={e => setQuery(e.target.value)} />
         <div className="cat-expand" style={{ background: 'transparent', border: 'none', padding: 0, marginTop: 8 }}>
-          {untagged.map(t => {
+          {findPaged.slice.map(t => {
             const acc = b.accounts.find(a => a.id === t.accountId);
             return (
-              <div className="txrow airbnb-txrow" key={t.id}>
+              <div className="txrow airbnb-find-row" key={t.id}>
                 <span className="mono tx-date">{dayLabel(t.date)}</span>
                 <span title={acc?.name}>{acc?.emoji}</span>
                 <span className="tx-desc">{t.desc}</span>
-                <span className="chip chip-soft" style={{ justifySelf: 'end' }}>{t.kind === 'income' ? '💰 income' : '🧾 expense'}</span>
                 <span className={'mono tx-amt' + (t.kind === 'income' ? ' up' : '')}>{fmt(t.amount)}</span>
-                <button className="btn-soft" style={{ padding: '3px 8px', fontSize: 12 }}
-                  title="Tag this to the property"
-                  onClick={() => b.tagTransaction(t.id, property.id)}>🏡 Tag</button>
+                <div className="airbnb-review-acts">
+                  <button className="btn-soft" style={{ padding: '3px 8px', fontSize: 12 }}
+                    title="Tag this to the property"
+                    onClick={() => b.tagTransaction(t.id, property.id)}>🏡 Tag</button>
+                  <button className="btn-soft" style={{ padding: '3px 8px', fontSize: 12 }}
+                    title="Ambiguous merchant (e.g. family) — send it and future lines to manual review instead of auto-tagging"
+                    onClick={() => b.setMerchantReview(t.desc, true)}>🔍 Review</button>
+                </div>
               </div>
             );
           })}
           {!untagged.length && <div className="hold-empty">{query ? 'No untagged matches — try another search.' : 'Nothing left to tag here.'}</div>}
         </div>
+        <Pager {...findPaged} total={untagged.length} />
       </Card>
     </>
   );
