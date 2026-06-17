@@ -224,7 +224,7 @@ export default function Airbnb({ b }) {
             {taggedPaged.slice.map(t => {
               const acc = b.accounts.find(a => a.id === t.accountId);
               return (
-                <div className="txrow airbnb-txrow" key={t.id}>
+                <div className="txrow airbnb-tagged-row" key={t.id}>
                   <span className="mono tx-date">{dayLabel(t.date)}</span>
                   <span title={acc?.name}>{acc?.emoji}</span>
                   <span className="tx-desc">{t.desc}</span>
@@ -238,8 +238,13 @@ export default function Airbnb({ b }) {
                     </select>
                   )}
                   <span className={'mono tx-amt' + (t.kind === 'income' ? ' up' : '')}>{fmt(t.amount)}</span>
-                  <button className="hold-del" title="Remove from this property (back to personal)"
-                    onClick={() => b.tagTransaction(t.id, null)}>✕</button>
+                  <div className="airbnb-review-acts">
+                    <button className="btn-soft" style={{ padding: '3px 8px', fontSize: 12 }}
+                      title="Ambiguous merchant (e.g. family) — move this and future lines to manual review instead of auto-tagging"
+                      onClick={() => b.setMerchantReview(t.desc, true)}>🔍 Review</button>
+                    <button className="hold-del" title="Remove from this property (back to personal)"
+                      onClick={() => b.tagTransaction(t.id, null)}>✕</button>
+                  </div>
                 </div>
               );
             })}
