@@ -699,7 +699,17 @@ body[data-mode="budget"] .brand-sun { background: #FFF3D6; }
 .cf-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
 .cf-dot-in { background: var(--up); }
 .cf-dot-out { background: var(--down); }
+.cf-dot-inv { background: var(--accent); }
 .cf-legend-note { margin-left: auto; color: var(--accent-deep); font-weight: 500; }
+
+/* money moved into investments — kept, not spent */
+.cf-bar-inv { background: var(--accent); }
+.inv { color: var(--accent-deep); }
+.cf-acct-row { margin-top: 4px; margin-bottom: 14px; flex-wrap: wrap; }
+.cf-money-map {
+  background: var(--accent-faint); border: 1px solid var(--accent-soft); border-radius: 12px;
+  padding: 12px 14px; font-size: 13px; line-height: 1.5; color: var(--ink); margin-bottom: 16px;
+}
 
 .cf-trend-list { display: flex; flex-direction: column; gap: 16px; }
 .cf-trend-row { padding-bottom: 14px; border-bottom: 1px solid var(--line); }

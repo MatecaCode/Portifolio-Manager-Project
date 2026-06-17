@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Card, Chip, SectionLabel, Term } from './ui';
 import { fmt, fmt0 } from '../lib/format';
+import { isInvestmentTransfer } from '../lib/statements';
 
 // The Cashflow view — the bird's-eye companion to the detailed Spending view.
 // Where Spending answers "what did we buy?", this answers "are we keeping more
@@ -37,8 +38,25 @@ function Spark({ points, width = 150, height = 34 }) {
 
 export default function Cashflow({ b, portfolioAccounts = [], onLinkChange }) {
   const [range, setRange] = useState(6);
+  const [selected, setSelected] = useState(null); // null = all accounts
 
   const checking = useMemo(() => b.accounts.filter(a => a.kind === 'checking'), [b.accounts]);
+
+  // ── which accounts feed the income/spending picture (tap to include) ──
+  const selectedIds = useMemo(() => {
+    const all = new Set(b.accounts.map(a => a.id));
+    if (selected === null) return all;
+    return new Set([...selected].filter(id => all.has(id)));
+  }, [selected, b.accounts]);
+  const allSelected = selectedIds.size === b.accounts.length;
+  const toggleAccount = id => setSelected(prev => {
+    const cur = prev === null ? new Set(b.accounts.map(a => a.id)) : new Set(prev);
+    if (cur.has(id)) cur.delete(id); else cur.add(id);
+    return cur;
+  });
+  const scopedTx = useMemo(
+    () => b.transactions.filter(t => selectedIds.has(t.accountId)),
+    [b.transactions, selectedIds]);
 
   // ── cash on hand: ending balance of each checking account ──
   const balances = useMemo(
@@ -47,34 +65,36 @@ export default function Cashflow({ b, portfolioAccounts = [], onLinkChange }) {
   const totalCash = balances.reduce((s, x) => s + (x.bal || 0), 0);
   const haveBalances = balances.some(x => x.bal != null);
 
-  // ── per-month income vs spend across every account (transfers already excluded) ──
+  // ── per-month income vs spend for the selected accounts (transfers excluded).
+  // Money moved into investments is pulled OUT of spending into its own bucket:
+  // it left the bank but it's still yours, so the overview reads it as retained. ──
   const allMonths = useMemo(() => {
-    const s = new Set(b.transactions.map(monthOf));
+    const s = new Set(scopedTx.map(monthOf));
     return [...s].sort(); // ascending
-  }, [b.transactions]);
+  }, [scopedTx]);
 
   const months = range === 0 ? allMonths : allMonths.slice(-range);
 
   const byMonth = useMemo(() => {
     const set = new Set(months);
     const m = {};
-    for (const ym of months) m[ym] = { income: 0, expense: 0 };
-    for (const t of b.transactions) {
+    for (const ym of months) m[ym] = { income: 0, expense: 0, invested: 0 };
+    for (const t of scopedTx) {
       const ym = monthOf(t);
       if (!set.has(ym)) continue;
       if (t.kind === 'income') m[ym].income += t.amount;
+      else if (isInvestmentTransfer(t.desc)) m[ym].invested += t.amount;
       else if (t.kind === 'expense') m[ym].expense += t.amount;
     }
     return months.map(ym => ({ ym, ...m[ym], net: m[ym].income - m[ym].expense }));
-  }, [b.transactions, months]);
+  }, [scopedTx, months]);
 
   const totals = byMonth.reduce((a, r) => ({
-    income: a.income + r.income, expense: a.expense + r.expense,
-  }), { income: 0, expense: 0 });
+    income: a.income + r.income, expense: a.expense + r.expense, invested: a.invested + r.invested,
+  }), { income: 0, expense: 0, invested: 0 });
   const net = totals.income - totals.expense;
-  const savingsRate = totals.income > 0 ? net / totals.income * 100 : null;
   const positiveMonths = byMonth.filter(r => r.net > 0).length;
-  const barMax = Math.max(1, ...byMonth.map(r => Math.max(r.income, r.expense)));
+  const barMax = Math.max(1, ...byMonth.map(r => Math.max(r.income, r.expense, r.invested)));
 
   // ── balance trend per account, from its statements ──
   const trends = useMemo(() => checking.map(a => {
@@ -85,7 +105,7 @@ export default function Cashflow({ b, portfolioAccounts = [], onLinkChange }) {
     return { acct: a, pts };
   }), [checking, b.statements]);
 
-  const hasIncomeData = b.transactions.some(t => t.kind === 'income');
+  const hasIncomeData = scopedTx.some(t => t.kind === 'income');
 
   return (
     <>
@@ -126,6 +146,21 @@ export default function Cashflow({ b, portfolioAccounts = [], onLinkChange }) {
           </div>
         }>Income vs. spending</SectionLabel>
 
+        {b.accounts.length > 1 && (
+          <div className="month-row cf-acct-row">
+            <button className={'month-chip' + (allSelected ? ' active' : '')} onClick={() => setSelected(null)}>
+              {allSelected ? '✓ All accounts' : 'All accounts'}
+            </button>
+            {b.accounts.map(a => (
+              <button key={a.id} className={'month-chip' + (selectedIds.has(a.id) ? ' active' : '')}
+                onClick={() => toggleAccount(a.id)}
+                title={selectedIds.has(a.id) ? 'Tap to exclude this account' : 'Tap to include this account'}>
+                {a.emoji} {a.name}
+              </button>
+            ))}
+          </div>
+        )}
+
         {!hasIncomeData && (
           <div className="hero-goal-note" style={{ marginBottom: 14 }}>
             Only spending data so far. Import a <strong>checking</strong> statement to capture income (paychecks, deposits) and unlock the keep-rate below. Card payments and internal transfers are always set aside so nothing is double-counted.
@@ -134,33 +169,40 @@ export default function Cashflow({ b, portfolioAccounts = [], onLinkChange }) {
 
         <div className="cf-stat-row">
           <div className="cf-stat">
-            <div className="cf-stat-label"><Term tip="Money coming in — deposits and paychecks on your checking statements. Internal transfers between your own accounts are excluded.">Income in</Term></div>
+            <div className="cf-stat-label"><Term tip="Money coming in — deposits and paychecks on the selected accounts. Internal transfers between your own accounts are excluded.">Income in</Term></div>
             <div className="cf-stat-val mono up">{fmt0(totals.income)}</div>
           </div>
           <div className="cf-stat">
-            <div className="cf-stat-label"><Term tip="Everything spent across all cards and accounts in this range. Card payments and self-transfers excluded.">Spent</Term></div>
+            <div className="cf-stat-label"><Term tip="Everything actually spent across the selected accounts in this range. Card payments, self-transfers, and money moved into investments are all excluded.">Spent</Term></div>
             <div className="cf-stat-val mono down">{fmt0(totals.expense)}</div>
           </div>
+          <div className="cf-stat cf-stat-inv">
+            <div className="cf-stat-label"><Term tip="Money moved into investment / brokerage accounts (Wealthfront, Fidelity, Kraken…). It left the bank but it's still yours — so it counts as kept, not spent.">Invested</Term></div>
+            <div className="cf-stat-val mono inv">{fmt0(totals.invested)}</div>
+          </div>
           <div className="cf-stat">
-            <div className="cf-stat-label"><Term tip="Income minus spending. Positive means you kept money this period; negative means you dipped into savings.">Net kept</Term></div>
+            <div className="cf-stat-label"><Term tip="Income minus spending. Money you put into investments is NOT spending, so it stays on the positive side here — you kept it, it's just working.">Net kept</Term></div>
             <div className={'cf-stat-val mono ' + (net >= 0 ? 'up' : 'down')}>{fmt(net, { plus: true, dec: 0 })}</div>
           </div>
-          <div className="cf-stat">
-            <div className="cf-stat-label"><Term tip="Share of income you held onto. 20%+ is a strong household savings rate.">Keep rate</Term></div>
-            <div className={'cf-stat-val mono ' + (savingsRate != null && savingsRate >= 0 ? 'up' : 'flat')}>
-              {savingsRate != null ? Math.round(savingsRate) + '%' : '—'}
-            </div>
-          </div>
         </div>
+
+        {totals.invested > 0 && (
+          <div className="cf-money-map">
+            🌱 Of the {fmt0(totals.income)} that came in, <strong className="down">{fmt0(totals.expense)}</strong> was
+            spent and <strong className="inv">{fmt0(totals.invested)}</strong> went into investments — that part
+            isn’t gone, it’s still yours and working. Counting it, you kept <strong className="up">{fmt0(net)}</strong>.
+          </div>
+        )}
 
         {/* month-by-month bars */}
         {byMonth.length > 0 ? (
           <div className="cf-bars">
             {byMonth.map(r => (
-              <div className="cf-bar-col" key={r.ym} title={`${monthLong(r.ym)} · in ${fmt0(r.income)} · out ${fmt0(r.expense)} · net ${fmt0(r.net)}`}>
+              <div className="cf-bar-col" key={r.ym} title={`${monthLong(r.ym)} · in ${fmt0(r.income)} · out ${fmt0(r.expense)}${r.invested ? ` · invested ${fmt0(r.invested)}` : ''} · net ${fmt0(r.net)}`}>
                 <div className="cf-bar-pair">
                   <div className="cf-bar cf-bar-in"  style={{ height: (r.income / barMax * 100) + '%' }} />
                   <div className="cf-bar cf-bar-out" style={{ height: (r.expense / barMax * 100) + '%' }} />
+                  {r.invested > 0 && <div className="cf-bar cf-bar-inv" style={{ height: (r.invested / barMax * 100) + '%' }} />}
                 </div>
                 <div className={'cf-bar-net mono ' + (r.net >= 0 ? 'up' : 'down')}>{r.net >= 0 ? '+' : '−'}{fmt0(Math.abs(r.net)).replace('$', '')}</div>
                 <div className="cf-bar-label">{monthLabel(r.ym)}</div>
@@ -174,6 +216,7 @@ export default function Cashflow({ b, portfolioAccounts = [], onLinkChange }) {
         <div className="cf-legend">
           <span><i className="cf-dot cf-dot-in" /> Income</span>
           <span><i className="cf-dot cf-dot-out" /> Spending</span>
+          {totals.invested > 0 && <span><i className="cf-dot cf-dot-inv" /> Invested</span>}
           {byMonth.length > 0 && (
             <span className="cf-legend-note">
               {positiveMonths === byMonth.length

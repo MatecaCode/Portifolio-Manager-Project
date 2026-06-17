@@ -68,6 +68,13 @@ const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')
 const isTransferDesc = desc =>
   /AUTOMATIC PAYMENT|PAYMENT[\s-]*THANK YOU|ONLINE PAYMENT|MOBILE PAYMENT|PAYMENT TO CHASE CARD|ONLINE TRANSFER|TRANSFER TO\s+SAV|TRANSFER FROM\s+SAV|EPAY|AUTOPAY/i.test(desc)
 
+// Money headed to an investment / brokerage account isn't spent — it's still
+// yours, just working. We recognize the usual destinations by description so
+// the cashflow overview can show it as retained (green) rather than as a spend.
+// Heuristic and easily extended; a tagged-account model can supersede it later.
+export const isInvestmentTransfer = desc =>
+  /WEALTHFRONT|FIDELITY|VANGUARD|SCHWAB|ROBINHOOD|COINBASE|KRAKEN|INTERACTIVE BROKERS|\bIBKR\b|BETTERMENT|ETRADE|E\*TRADE|TD AMERITRADE|ACORNS|MERRILL|SOFI INVEST|WEBULL|BINANCE\.US|BINANCE US|BROKERAGE/i.test(String(desc || ''))
+
 // PDF extractors don't agree on column spacing — collapse runs of spaces
 // so the header/transaction regexes see one canonical layout.
 const normalize = lines => lines.map(l => l.replace(/\s+/g, ' ').trim())
