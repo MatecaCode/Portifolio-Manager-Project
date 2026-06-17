@@ -170,12 +170,22 @@ not plain. Also needs a way to set up a budget if we want a goal to aim for.
 - **Monarch Money** — shared finances built for couples
 - **Rocket Money** — unused-subscription detection and cancellation nudges
 
-**Current state (June 2026): functional v1.** PDF import works end-to-end:
+**Current state (June 2026): functional v1.** PDF + CSV import works end-to-end:
 - `src/lib/statements.js` — pdf.js (v4, kept for older-browser compat) extracts
   text in the browser (file never leaves the page); regex parsers for Chase
   credit card (ACCOUNT ACTIVITY) and Chase checking (TRANSACTION DETAIL)
   formats. Gotchas handled: double-spaced headers, detached minus signs
   ("- 25.00"), Dec→Jan billing cycles, multi-line FX descriptions.
+- CSV import too (`parseStatement` dispatches on extension): Chase activity
+  CSV (Details, Posting Date, Description, Amount, **Type**, Balance) and
+  Chase card CSV (Transaction Date, …, Type, Amount). The Type column is
+  authoritative — ACCT_XFER/LOAN_PMT → transfer, credits → income, debits →
+  categorized expense — more reliable than guessing from the description.
+  CSV is the long-term format (Chase only offers ~recent months as PDF).
+  last4 comes from the filename ("Chase9269_Activity_…"); RFC-4180 parser
+  handles quoted descriptions with embedded commas. A CSV re-import merges
+  into the matching PDF account and transaction-level dedup drops the
+  overlapping rows (verified: PDF 29 + CSV 141 − 23 overlaps = 147).
 - `src/data/budget.js` — 11 emoji categories + ordered merchant rules
   (H-E-B PHARMACY→health before H-E-B→groceries, UBER EATS before UBER, etc.)
 - `src/hooks/useBudget.js` — Supabase `budget_state` shared-row sync (table
@@ -192,5 +202,5 @@ not plain. Also needs a way to set up a budget if we want a goal to aim for.
   ($2,792.04 = purchases + fee − refund); checking ···9269 all 29 rows.
 
 **Next ideas:** merchant-rule learning from manual recategorizations, more
-bank formats (Wealthfront cash, CSV fallback), monthly recap story like the
-Growth tab, subscription/recurring detection view, budget rollover.
+bank formats (Wealthfront cash), monthly recap story like the Growth tab,
+subscription/recurring detection view, budget rollover.

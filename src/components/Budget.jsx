@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Card, Chip, Donut, ProgressBar, SectionLabel, Term } from './ui';
 import { fmt, fmt0 } from '../lib/format';
 import { BUDGET_CATEGORIES, catById } from '../data/budget';
-import { parseStatementPdf } from '../lib/statements';
+import { parseStatement } from '../lib/statements';
 import Cashflow from './Cashflow';
 import Airbnb from './Airbnb';
 
@@ -12,7 +12,7 @@ import Airbnb from './Airbnb';
 // per-account or combined. See CONCEPT.md → "Budget Companion".
 
 const STEPS = [
-  { emoji: '💳', title: '1 · Drop in a statement', text: 'Upload a Chase credit card or checking statement PDF. It’s read right here in your browser — the file never leaves the page.' },
+  { emoji: '💳', title: '1 · Drop in a statement', text: 'Upload a Chase credit card or checking statement — PDF or CSV. It’s read right here in your browser, so the file never leaves the page.' },
   { emoji: '✨', title: '2 · Every dollar gets sorted', text: '"H-E-B #796 ALLEN TX" becomes 🛒 Groceries. Card payments and savings transfers are set aside so nothing is double-counted.' },
   { emoji: '🧠', title: '3 · Explore & combine', text: 'Each card or account gets its own profile. Look at one, pick a few, or combine everything for the full monthly picture.' },
 ];
@@ -108,14 +108,14 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
 
   // ── file handling ──
   async function handleFiles(fileList) {
-    const files = [...fileList].filter(f => /\.pdf$/i.test(f.name));
+    const files = [...fileList].filter(f => /\.(pdf|csv)$/i.test(f.name));
     if (!files.length) return;
     setBusy(true);
     setLastImport(null);
     const results = [];
     for (const f of files) {
       try {
-        const parsed = await parseStatementPdf(f);
+        const parsed = await parseStatement(f);
         results.push({ id: Math.random().toString(36).slice(2), parsed });
       } catch (e) {
         results.push({ id: Math.random().toString(36).slice(2), error: e.message, fileName: f.name });
@@ -128,7 +128,7 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
   function confirmImport(item) {
     const res = b.importStatement(item.parsed);
     if (res.duplicateStatement) {
-      setPending(p => p.map(x => x.id === item.id ? { ...x, error: 'This statement was already imported (same account + same closing date). Skipped to avoid duplicates. 🔒' } : x));
+      setPending(p => p.map(x => x.id === item.id ? { ...x, error: 'This exact file was already imported (same account + same end date). Any new transactions in an overlapping export are still de-duplicated automatically. 🔒' } : x));
       return;
     }
     setPending(p => p.filter(x => x.id !== item.id));
@@ -180,8 +180,8 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
       role="button" tabIndex={0}
     >
       <div className="dropzone-title">{busy ? <span><span className="spin">⟳</span> Reading your statement…</span> : 'Drop a Chase statement here 📄'}</div>
-      <p>Credit card or checking PDF — or click to browse. Parsed in your browser, previewed before anything is saved.</p>
-      <input ref={fileRef} type="file" accept=".pdf,application/pdf" multiple hidden
+      <p>Credit card or checking — PDF or CSV. Click to browse. Parsed in your browser, previewed before anything is saved.</p>
+      <input ref={fileRef} type="file" accept=".pdf,application/pdf,.csv,text/csv" multiple hidden
         onChange={e => { handleFiles(e.target.files); e.target.value = ''; }} />
     </div>
   );
