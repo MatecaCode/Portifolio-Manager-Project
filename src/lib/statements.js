@@ -1,7 +1,9 @@
-// Chase statement parsing — runs entirely in the browser; the PDF never
-// leaves the page. Two formats supported:
-//   • Chase credit card statements  (ACCOUNT ACTIVITY: date / description / amount)
-//   • Chase checking/savings        (TRANSACTION DETAIL: date / description / amount / balance)
+// Chase statement parsing — runs entirely in the browser; the file never
+// leaves the page. Formats supported:
+//   • Chase credit card PDF   (ACCOUNT ACTIVITY: date / description / amount)
+//   • Chase checking/savings PDF (TRANSACTION DETAIL: date / desc / amount / balance)
+//   • Chase activity CSV      (Details, Posting Date, Description, Amount, Type, Balance)
+//   • Chase credit card CSV   (Transaction Date, Post Date, Description, Category, Type, Amount)
 import { categorize } from '../data/budget'
 
 // pdfjs is loaded lazily so the (large) library and worker only download
@@ -174,7 +176,145 @@ export function parseChecking(rawLines) {
   }
 }
 
-// ── Entry point ────────────────────────────────────────────────────
+// ── CSV ─────────────────────────────────────────────────────────────
+// Minimal RFC-4180 parser: handles quoted fields, embedded commas, and
+// doubled "" escapes. Chase descriptions can contain commas, so we can't
+// just split on ",".
+function parseCsvRows(text) {
+  const rows = []
+  let row = [], field = '', inQuotes = false
+  const s = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text // strip BOM
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (inQuotes) {
+      if (c === '"') {
+        if (s[i + 1] === '"') { field += '"'; i++ } else inQuotes = false
+      } else field += c
+    } else if (c === '"') inQuotes = true
+    else if (c === ',') { row.push(field); field = '' }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && s[i + 1] === '\n') i++
+      if (field !== '' || row.length) { row.push(field); rows.push(row); row = []; field = '' }
+    } else field += c
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row) }
+  return rows
+}
+
+// MM/DD/YYYY (or MM/DD/YY) → ISO yyyy-mm-dd
+function isoFromMDY(s) {
+  const [mo, d, y] = s.trim().split('/').map(Number)
+  const year = y < 100 ? 2000 + y : y
+  return iso(new Date(year, mo - 1, d))
+}
+
+const last4FromName = name => {
+  const m = String(name).match(/(?:chase|acct|account)[ _-]*(\d{4})/i) || String(name).match(/\b(\d{4})\b/)
+  return m ? m[1] : '????'
+}
+
+// Chase activity CSV is the same shape for checking and savings exports.
+// The Type column tells us exactly what each row is — far more reliable
+// than guessing from the description.
+const CSV_TRANSFER_TYPES = new Set(['ACCT_XFER', 'LOAN_PMT'])
+
+export function parseChaseCheckingCsv(rows, fileName) {
+  const header = rows[0].map(h => h.trim().toLowerCase())
+  const col = name => header.indexOf(name)
+  const iDate = col('posting date'), iDesc = col('description'), iAmt = col('amount'), iType = col('type'), iBal = col('balance')
+  if (iDate < 0 || iDesc < 0 || iAmt < 0) return null
+
+  const txs = []
+  const dated = [] // { date, balance, signedAmount } for closing/opening balance
+  for (const r of rows.slice(1)) {
+    if (!r[iDate] || r[iAmt] == null || r[iAmt] === '') continue
+    const amt = parseAmount(r[iAmt])
+    if (Number.isNaN(amt)) continue
+    const date = isoFromMDY(r[iDate])
+    const desc = (r[iDesc] || '').replace(/\s+/g, ' ').trim()
+    const type = (r[iType] || '').trim().toUpperCase()
+    const bal = iBal >= 0 ? parseAmount(r[iBal]) : NaN
+    const balance = Number.isNaN(bal) ? null : bal
+    dated.push({ date, balance, signedAmount: amt })
+
+    if (CSV_TRANSFER_TYPES.has(type)) {
+      txs.push({ date, desc, amount: Math.abs(amt), kind: 'transfer', category: null, balance })
+    } else if (amt > 0) {
+      txs.push({ date, desc, amount: amt, kind: 'income', category: null, balance })
+    } else {
+      txs.push({ date, desc, amount: Math.abs(amt), kind: 'expense', category: categorize(desc), balance })
+    }
+  }
+  if (!txs.length) return null
+
+  // Chase exports newest-first, so the running Balance column lets us recover
+  // the account's cash position. Rows share a date, so we lean on file order
+  // to break ties: the FIRST row of the newest date is the most recent
+  // transaction (its balance is the closing balance); the LAST row of the
+  // oldest date is the earliest transaction (its balance minus its own amount
+  // is the opening balance). Strict > / <= preserve those first/last picks.
+  const withBal = dated.filter(d => d.balance != null)
+  let beginningBalance = null, endingBalance = null
+  if (withBal.length) {
+    const newest = withBal.reduce((a, d) => (d.date > a.date ? d : a))
+    const oldest = withBal.reduce((a, d) => (d.date <= a.date ? d : a))
+    endingBalance = newest.balance
+    beginningBalance = Math.round((oldest.balance - oldest.signedAmount) * 100) / 100
+  }
+
+  const dates = dated.map(d => d.date).sort()
+  return {
+    kind: 'checking', last4: last4FromName(fileName),
+    periodStart: dates[0], periodEnd: dates[dates.length - 1],
+    beginningBalance, endingBalance, transactions: txs,
+  }
+}
+
+// Chase credit-card CSV: Transaction Date, Post Date, Description, Category, Type, Amount, Memo
+// Purchases come through as negative Amount; "Payment"/"Return" rows are credits.
+export function parseChaseCardCsv(rows, fileName) {
+  const header = rows[0].map(h => h.trim().toLowerCase())
+  const col = name => header.indexOf(name)
+  const iDate = col('transaction date'), iDesc = col('description'), iAmt = col('amount'), iType = col('type')
+  if (iDate < 0 || iDesc < 0 || iAmt < 0) return null
+
+  const txs = []
+  const dates = []
+  for (const r of rows.slice(1)) {
+    if (!r[iDate] || r[iAmt] == null || r[iAmt] === '') continue
+    const amt = parseAmount(r[iAmt])
+    if (Number.isNaN(amt)) continue
+    const date = isoFromMDY(r[iDate])
+    const desc = (r[iDesc] || '').replace(/\s+/g, ' ').trim()
+    const type = (r[iType] || '').trim().toLowerCase()
+    dates.push(date)
+
+    if (type === 'payment') {
+      txs.push({ date, desc, amount: Math.abs(amt), kind: 'transfer', category: null })
+    } else if (type === 'fee') {
+      txs.push({ date, desc, amount: Math.abs(amt), kind: 'expense', category: 'fees' })
+    } else {
+      // purchases: positive spend; returns/refunds keep their negative sign
+      txs.push({ date, desc, amount: -amt, kind: 'expense', category: categorize(desc) })
+    }
+  }
+  if (!txs.length) return null
+  dates.sort()
+  return { kind: 'card', last4: last4FromName(fileName), periodStart: dates[0], periodEnd: dates[dates.length - 1], transactions: txs }
+}
+
+export function parseStatementCsvText(text, fileName) {
+  const rows = parseCsvRows(text)
+  if (!rows.length) throw new Error('That CSV looks empty.')
+  const header = rows[0].map(h => h.trim().toLowerCase())
+  let parsed = null
+  if (header.includes('posting date')) parsed = parseChaseCheckingCsv(rows, fileName)
+  else if (header.includes('transaction date')) parsed = parseChaseCardCsv(rows, fileName)
+  if (!parsed) throw new Error("Couldn't recognize this CSV as a Chase activity export. Expected a header row with Posting Date or Transaction Date.")
+  return parsed
+}
+
+// ── Entry points ────────────────────────────────────────────────────
 export async function parseStatementPdf(file) {
   const lines = await extractPdfLines(file)
   const text = normalize(lines).join('\n')
@@ -188,6 +328,20 @@ export async function parseStatementPdf(file) {
 
   if (!parsed) throw new Error("Couldn't recognize this PDF as a Chase card or account statement.")
   if (!parsed.transactions.length) throw new Error('Recognized the statement but found no transactions in it.')
+  parsed.fileName = file.name
+  return parsed
+}
+
+// Unified entry point — dispatches on file type.
+export async function parseStatement(file) {
+  const isCsv = /\.csv$/i.test(file.name) || file.type === 'text/csv'
+  let parsed
+  if (isCsv) {
+    parsed = parseStatementCsvText(await file.text(), file.name)
+  } else {
+    return parseStatementPdf(file)
+  }
+  if (!parsed.transactions.length) throw new Error('Recognized the file but found no transactions in it.')
   parsed.fileName = file.name
   return parsed
 }
