@@ -6,6 +6,12 @@
 //   • Chase credit card CSV   (Transaction Date, Post Date, Description, Category, Type, Amount)
 import { categorize } from '../data/budget'
 
+// Account kinds that hold a real cash balance — a credit card owes money, it
+// doesn't hold it. Wealthfront savings sits here next to Chase checking so its
+// balance flows into "cash on hand", net worth, and the portfolio-sync picker.
+export const CASH_ACCOUNT_KINDS = ['checking', 'savings']
+export const isCashAccount = kind => CASH_ACCOUNT_KINDS.includes(kind)
+
 // pdfjs is loaded lazily so the (large) library and worker only download
 // when someone actually imports a statement.
 let pdfjsPromise = null
@@ -310,14 +316,66 @@ export function parseChaseCardCsv(rows, fileName) {
   return { kind: 'card', last4: last4FromName(fileName), periodStart: dates[0], periodEnd: dates[dates.length - 1], transactions: txs }
 }
 
+// ── Wealthfront cash / savings CSV ──────────────────────────────────
+// Export shape: Transaction date, Description, Type, Amount  (no balance column)
+//   • Deposit / Withdrawal → cash moving between the household's own accounts,
+//     so it's a transfer — set aside from income & spending, never double-counted
+//   • Interest payment     → interest the account earned → income
+// With no running-balance column we rebuild the balance by summing the signed
+// amounts. Wealthfront's default export is the full account history ("all time"),
+// so that sum is the current balance; the preview shows it before anything saves.
+export function parseWealthfrontCsv(rows, fileName) {
+  const header = rows[0].map(h => h.trim().toLowerCase())
+  const col = name => header.indexOf(name)
+  const iDate = col('transaction date'), iDesc = col('description'), iType = col('type'), iAmt = col('amount')
+  if (iDate < 0 || iAmt < 0) return null
+
+  const txs = []
+  const dates = []
+  let net = 0
+  for (const r of rows.slice(1)) {
+    if (!r[iDate] || r[iAmt] == null || r[iAmt] === '') continue
+    const amt = parseAmount(r[iAmt])
+    if (Number.isNaN(amt)) continue
+    const date = isoFromMDY(r[iDate])
+    const desc = (r[iDesc] || '').replace(/\s+/g, ' ').trim()
+    const type = (iType >= 0 ? r[iType] || '' : '').trim().toLowerCase()
+    dates.push(date)
+    net += amt
+
+    if (/interest/.test(type)) {
+      txs.push({ date, desc, amount: Math.abs(amt), kind: 'income', category: null })
+    } else {
+      // deposits (+) and withdrawals (−) both shuttle cash between own accounts
+      txs.push({ date, desc, amount: Math.abs(amt), kind: 'transfer', category: null })
+    }
+  }
+  if (!txs.length) return null
+  dates.sort()
+  return {
+    kind: 'savings',
+    last4: last4FromName(fileName),
+    periodStart: dates[0],
+    periodEnd: dates[dates.length - 1],
+    beginningBalance: 0,
+    endingBalance: Math.round(net * 100) / 100,
+    transactions: txs,
+  }
+}
+
 export function parseStatementCsvText(text, fileName) {
   const rows = parseCsvRows(text)
   if (!rows.length) throw new Error('That CSV looks empty.')
   const header = rows[0].map(h => h.trim().toLowerCase())
+  const has = h => header.includes(h)
   let parsed = null
-  if (header.includes('posting date')) parsed = parseChaseCheckingCsv(rows, fileName)
-  else if (header.includes('transaction date')) parsed = parseChaseCardCsv(rows, fileName)
-  if (!parsed) throw new Error("Couldn't recognize this CSV as a Chase activity export. Expected a header row with Posting Date or Transaction Date.")
+  if (has('posting date')) parsed = parseChaseCheckingCsv(rows, fileName)
+  // Wealthfront's cash export is just date/description/type/amount — it lacks the
+  // Post Date + Category of a Chase card CSV and the Posting Date of Chase checking.
+  else if (has('transaction date') && has('type') && has('amount') && !has('post date') && !has('category'))
+    parsed = parseWealthfrontCsv(rows, fileName)
+  else if (has('transaction date')) parsed = parseChaseCardCsv(rows, fileName)
+  if (!parsed) throw new Error("Couldn't recognize this CSV. Expected a Chase export (Posting Date or Transaction Date) or a Wealthfront export (Transaction date / Description / Type / Amount).")
   return parsed
 }
 

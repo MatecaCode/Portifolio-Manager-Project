@@ -43,12 +43,37 @@ export const PROPERTY_DEFAULTS = {
   active: true,
 }
 
+// Person-to-person payment rails. For these the "merchant" is the COUNTERPARTY,
+// not the rail — "Zelle to Borrelio" and "Zelle to Mom" must key differently or
+// one learned rule would swallow every Zelle you ever send.
+const P2P_RAIL = /\b(ZELLE|VENMO|CASH ?APP|CASHAPP|PAYPAL|APPLE CASH)\b/
+// Connective + bookkeeping words that sit between the rail and the actual name.
+const P2P_NOISE = /\b(PAYMENT|PMT|TO|FROM|FOR|ID|WEB|REF|CONF|RECURRING|INSTANT|TRANSFER|VIA|SENT|RECEIVED)\b/g
+
 // Normalize a bank description down to a stable "merchant" so the same vendor
 // auto-tags every month (Octopus Energy, Spectrum…). Strips store numbers,
-// punctuation, and trailing location noise; keeps the leading words.
+// punctuation, and trailing location noise; keeps the leading words. For
+// person-to-person payments it keys on the recipient instead, so tagging
+// "Zelle to Borrelio" once teaches *Borrelio*, not all of Zelle.
 export function merchantKey(desc) {
-  return String(desc || '')
-    .toUpperCase()
+  const raw = String(desc || '').toUpperCase()
+  const rail = raw.match(P2P_RAIL)
+  if (rail) {
+    const railName = rail[1].replace(/\s+/g, '')   // CASH APP → CASHAPP
+    const name = raw.slice(rail.index + rail[0].length)
+      .replace(/[^A-Z0-9 ]/g, ' ')                 // *, #, : → space
+      .replace(P2P_NOISE, ' ')                      // drop "PAYMENT TO" etc.
+      .replace(/\bJPM[A-Z0-9]*\b/g, ' ')           // Chase Zelle confirmation token
+      .replace(/\b[A-Z]*\d[A-Z0-9]*\b/g, ' ')      // drop any token with a digit (IDs)
+      .replace(/\s+/g, ' ')
+      .trim()
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)                                  // first/last name is enough
+      .join(' ')
+    return name ? `${railName} ${name}` : railName
+  }
+  return raw
     .replace(/[^A-Z0-9 ]/g, ' ')   // drop punctuation (#, *, etc.)
     .replace(/\b\d[\d]*\b/g, ' ')  // drop standalone number tokens
     .replace(/\s+/g, ' ')

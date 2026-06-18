@@ -2,9 +2,18 @@ import { useMemo, useRef, useState } from 'react';
 import { Card, Chip, Donut, ProgressBar, SectionLabel, Term } from './ui';
 import { fmt, fmt0 } from '../lib/format';
 import { BUDGET_CATEGORIES, catById } from '../data/budget';
-import { parseStatement } from '../lib/statements';
+import { parseStatement, isCashAccount } from '../lib/statements';
 import Cashflow from './Cashflow';
 import Airbnb from './Airbnb';
+
+// Per-account-kind labels + emoji, shared by the profile cards and the import
+// preview so a new source only needs adding in one place.
+const KIND_META = {
+  card:     { emoji: '💳', label: 'Chase credit card',    profile: 'Chase Card',          sub: 'credit card' },
+  checking: { emoji: '🏦', label: 'Chase checking',       profile: 'Chase Checking',      sub: 'checking' },
+  savings:  { emoji: '🏛️', label: 'Wealthfront savings',  profile: 'Wealthfront Savings', sub: 'savings' },
+};
+const kindMeta = k => KIND_META[k] || { emoji: '🧾', label: 'Account', profile: 'Account', sub: 'account' };
 
 // The Budget platform — the spending-side sibling of the portfolio.
 // Drop in a Chase card/checking statement (PDF or CSV, parsed locally in
@@ -12,7 +21,7 @@ import Airbnb from './Airbnb';
 // explore per-account or combined. See CONCEPT.md → "Budget Companion".
 
 const STEPS = [
-  { emoji: '💳', title: '1 · Drop in a statement', text: 'Upload a Chase credit card or checking statement — PDF or CSV. It’s read right here in your browser, so the file never leaves the page.' },
+  { emoji: '💳', title: '1 · Drop in a statement', text: 'Upload a Chase card or checking statement (PDF or CSV) or a Wealthfront savings export (CSV). It’s read right here in your browser, so the file never leaves the page.' },
   { emoji: '✨', title: '2 · Every dollar gets sorted', text: '"H-E-B #796 ALLEN TX" becomes 🛒 Groceries. Card payments and savings transfers are set aside so nothing is double-counted.' },
   { emoji: '🧠', title: '3 · Explore & combine', text: 'Each card or account gets its own profile. Look at one, pick a few, or combine everything for the full monthly picture.' },
 ];
@@ -139,7 +148,7 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
     // Auto-update the linked portfolio cash account with this statement's
     // closing balance — but only if it's the newest statement we hold for
     // the account (so re-importing an old month never rolls net worth back).
-    if (res.kind === 'checking' && res.endingBalance != null && syncAccountValue) {
+    if (isCashAccount(res.kind) && res.endingBalance != null && syncAccountValue) {
       const acct = b.accounts.find(a => a.id === res.accountId);
       const newerExists = b.statements.some(
         s => s.accountId === res.accountId && s.endingBalance != null && s.periodEnd > res.periodEnd);
@@ -169,6 +178,9 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
 
   const hasData = b.transactions.length > 0;
   const allSelected = selectedIds.size === b.accounts.length;
+  // Lines the AI flagged as ambiguous (e.g. a family member's Zelle) and won't
+  // auto-decide — surfaced on the Airbnb tab so they're never missed.
+  const reviewCount = useMemo(() => b.transactions.filter(t => t.reviewFlag).length, [b.transactions]);
 
   const dropzone = (
     <div
@@ -179,8 +191,8 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
       onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
       role="button" tabIndex={0}
     >
-      <div className="dropzone-title">{busy ? <span><span className="spin">⟳</span> Reading your statement…</span> : 'Drop a Chase statement here 📄'}</div>
-      <p>Credit card or checking — PDF or CSV. Click to browse. Parsed in your browser, previewed before anything is saved.</p>
+      <div className="dropzone-title">{busy ? <span><span className="spin">⟳</span> Reading your statement…</span> : 'Drop a statement here 📄'}</div>
+      <p>Chase card or checking (PDF or CSV) and Wealthfront savings (CSV). Click to browse. Parsed in your browser, previewed before anything is saved.</p>
       <input ref={fileRef} type="file" accept=".pdf,application/pdf,.csv,text/csv" multiple hidden
         onChange={e => { handleFiles(e.target.files); e.target.value = ''; }} />
     </div>
@@ -243,7 +255,9 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
           <div className="cf-toggle">
             <button className={'cf-toggle-btn' + (view === 'cashflow' ? ' active' : '')} onClick={() => setView('cashflow')}>📊 Cashflow</button>
             <button className={'cf-toggle-btn' + (view === 'spending' ? ' active' : '')} onClick={() => setView('spending')}>🧾 Spending</button>
-            <button className={'cf-toggle-btn' + (view === 'airbnb' ? ' active' : '')} onClick={() => setView('airbnb')}>🏡 Airbnb</button>
+            <button className={'cf-toggle-btn' + (view === 'airbnb' ? ' active' : '')} onClick={() => setView('airbnb')}>
+              🏡 Airbnb{reviewCount > 0 && <span className="cf-review-flag"> · 🔍 {reviewCount}</span>}
+            </button>
           </div>
 
           {view === 'cashflow' && (
@@ -275,7 +289,7 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
                         onChange={e => b.renameAccount(a.id, e.target.value)} />
                       <span className={'bacct-tick' + (on ? ' on' : '')}>{on ? '✓' : ''}</span>
                     </div>
-                    <div className="bacct-sub mono">···{a.last4} · {a.kind === 'card' ? 'credit card' : 'checking'}</div>
+                    <div className="bacct-sub mono">{a.last4 && a.last4 !== '????' ? `···${a.last4} · ` : ''}{kindMeta(a.kind).sub}</div>
                     <div className="bacct-spent mono">{fmt0(perAccountSpent[a.id] || 0)}<span className="bacct-spent-label"> spent</span></div>
                   </Card>
                 );
@@ -483,24 +497,27 @@ function PendingPreview({ item, accounts, onConfirm, onCancel }) {
   const p = item.parsed;
   const s = summarizeParsed(p);
   const existing = accounts.find(a => a.last4 === p.last4 && a.kind === p.kind);
+  const meta = kindMeta(p.kind);
+  const showLast4 = p.last4 && p.last4 !== '????';
   const catSums = {};
   for (const t of p.transactions) if (t.kind === 'expense') catSums[t.category || 'other'] = (catSums[t.category || 'other'] || 0) + t.amount;
   const topCats = Object.entries(catSums).sort((a, z) => z[1] - a[1]).slice(0, 5);
   return (
     <Card className="pending-card">
       <SectionLabel right={<Chip tone="warn">PREVIEW — nothing saved yet</Chip>}>
-        {p.kind === 'card' ? '💳 Chase credit card' : '🏦 Chase checking'} ···{p.last4}
+        {meta.emoji} {meta.label}{showLast4 ? ` ···${p.last4}` : ''}
       </SectionLabel>
       <p className="reb-tip" style={{ marginBottom: 10 }}>
         {existing
           ? <>Matches your existing profile <strong>{existing.emoji} {existing.name}</strong>.</>
-          : <>New profile will be created: <strong>{p.kind === 'card' ? '💳 Chase Card' : '🏦 Chase Checking'} ···{p.last4}</strong> (rename it any time).</>}
+          : <>New profile will be created: <strong>{meta.emoji} {meta.profile}{showLast4 ? ` ···${p.last4}` : ''}</strong> (rename it any time).</>}
         {' '}Statement period <strong className="mono">{p.periodStart} → {p.periodEnd}</strong>.
       </p>
       <div className="pending-stats">
-        <Chip tone="soft">🧾 {s.expense} expenses · {fmt0(s.spend)}</Chip>
-        {s.income > 0 && <Chip tone="soft">💰 {s.income} deposits</Chip>}
+        {s.expense > 0 && <Chip tone="soft">🧾 {s.expense} expenses · {fmt0(s.spend)}</Chip>}
+        {s.income > 0 && <Chip tone="soft">💰 {s.income} income</Chip>}
         {s.transfer > 0 && <Chip tone="soft">🔁 {s.transfer} transfers (excluded)</Chip>}
+        {isCashAccount(p.kind) && p.endingBalance != null && <Chip tone="soft">🏦 Balance {fmt0(p.endingBalance)}</Chip>}
       </div>
       <div className="pending-cats">
         {topCats.map(([id, amt]) => {

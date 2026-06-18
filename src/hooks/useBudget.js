@@ -17,6 +17,7 @@ const txKey = t => [t.accountId, t.date, Number(t.amount).toFixed(2), t.kind, t.
 const ACCOUNT_DEFAULTS = {
   card:     { emoji: '💳', label: 'Chase Card' },
   checking: { emoji: '🏦', label: 'Chase Checking' },
+  savings:  { emoji: '🏛️', label: 'Wealthfront Savings' },
 }
 
 // On import, auto-attribute the obvious house items + anything a learned
@@ -124,12 +125,15 @@ export function useBudget() {
     let nextAccounts = accounts
     if (!account) {
       const d = ACCOUNT_DEFAULTS[parsed.kind] || { emoji: '🧾', label: 'Account' }
+      // Some exports (e.g. Wealthfront) carry no account number — skip the
+      // "···????" suffix so the profile reads cleanly as just its label.
+      const hasLast4 = parsed.last4 && parsed.last4 !== '????'
       account = {
         id: uid('acc'),
         kind: parsed.kind,
         last4: parsed.last4,
         emoji: d.emoji,
-        name: accountName || `${d.label} ···${parsed.last4}`,
+        name: accountName || (hasLast4 ? `${d.label} ···${parsed.last4}` : d.label),
       }
       nextAccounts = [...accounts, account]
     }

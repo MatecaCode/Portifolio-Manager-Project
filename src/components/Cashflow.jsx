@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Card, Chip, SectionLabel, Term } from './ui';
 import { fmt, fmt0 } from '../lib/format';
-import { isInvestmentTransfer } from '../lib/statements';
+import { isInvestmentTransfer, isCashAccount } from '../lib/statements';
 
 // The Cashflow view — the bird's-eye companion to the detailed Spending view.
 // Where Spending answers "what did we buy?", this answers "are we keeping more
@@ -40,7 +40,8 @@ export default function Cashflow({ b, portfolioAccounts = [], onLinkChange }) {
   const [range, setRange] = useState(6);
   const [selected, setSelected] = useState(null); // null = all accounts
 
-  const checking = useMemo(() => b.accounts.filter(a => a.kind === 'checking'), [b.accounts]);
+  // Cash-holding accounts (checking + savings) — credit cards owe, they don't hold.
+  const cashAccts = useMemo(() => b.accounts.filter(a => isCashAccount(a.kind)), [b.accounts]);
 
   // ── which accounts feed the income/spending picture (tap to include) ──
   const selectedIds = useMemo(() => {
@@ -60,8 +61,8 @@ export default function Cashflow({ b, portfolioAccounts = [], onLinkChange }) {
 
   // ── cash on hand: ending balance of each checking account ──
   const balances = useMemo(
-    () => checking.map(a => ({ acct: a, bal: b.accountBalance(a.id) })),
-    [checking, b]);
+    () => cashAccts.map(a => ({ acct: a, bal: b.accountBalance(a.id) })),
+    [cashAccts, b]);
   const totalCash = balances.reduce((s, x) => s + (x.bal || 0), 0);
   const haveBalances = balances.some(x => x.bal != null);
 
@@ -97,13 +98,13 @@ export default function Cashflow({ b, portfolioAccounts = [], onLinkChange }) {
   const barMax = Math.max(1, ...byMonth.map(r => Math.max(r.income, r.expense, r.invested)));
 
   // ── balance trend per account, from its statements ──
-  const trends = useMemo(() => checking.map(a => {
+  const trends = useMemo(() => cashAccts.map(a => {
     const pts = b.statements
       .filter(s => s.accountId === a.id && s.endingBalance != null)
       .sort((x, y) => x.periodEnd.localeCompare(y.periodEnd))
       .map(s => ({ t: s.periodEnd, v: s.endingBalance }));
     return { acct: a, pts };
-  }), [checking, b.statements]);
+  }), [cashAccts, b.statements]);
 
   const hasIncomeData = scopedTx.some(t => t.kind === 'income');
 
@@ -114,12 +115,12 @@ export default function Cashflow({ b, portfolioAccounts = [], onLinkChange }) {
         <div>
           <div className="hero-greeting">Where things stand 🏦</div>
           <div className="hero-networth">
-            <Term tip="The real cash sitting in your bank (checking) accounts right now — taken from the closing balance of the most recent statement for each. Credit cards aren't cash, so they're left out.">Cash on hand</Term>
+            <Term tip="The real cash sitting in your bank (checking & savings) accounts right now — taken from the closing balance of the most recent statement for each. Credit cards aren't cash, so they're left out.">Cash on hand</Term>
             <div className="hero-amount">{haveBalances ? fmt0(totalCash) : '—'}</div>
           </div>
           {!haveBalances && (
             <div className="hero-goal-note">
-              No bank balances captured yet. Import a Chase <strong>checking</strong> statement (not a card) and its closing balance shows up here.
+              No bank balances captured yet. Import a <strong>checking</strong> or <strong>savings</strong> statement (not a card) and its closing balance shows up here.
             </div>
           )}
         </div>
@@ -131,7 +132,7 @@ export default function Cashflow({ b, portfolioAccounts = [], onLinkChange }) {
                 <span className="cf-bal-amt mono">{bal != null ? fmt0(bal) : <span className="flat">no statement</span>}</span>
               </div>
             ))}
-            {!checking.length && <div className="hs-sub">No checking accounts yet — only credit cards hold no cash balance.</div>}
+            {!cashAccts.length && <div className="hs-sub">No cash accounts yet — only credit cards hold no balance.</div>}
           </div>
         </div>
       </Card>
@@ -228,11 +229,11 @@ export default function Cashflow({ b, portfolioAccounts = [], onLinkChange }) {
       </Card>
 
       {/* balance trend + portfolio sync */}
-      {checking.length > 0 && (
+      {cashAccts.length > 0 && (
         <Card>
           <SectionLabel>Balance over time &amp; portfolio sync</SectionLabel>
           <p className="reb-tip" style={{ marginBottom: 12 }}>
-            Link a checking account to one of your portfolio cash accounts — each new statement then writes its closing balance straight into your net worth, so you only enter it once.
+            Link a checking or savings account to one of your portfolio cash accounts — each new statement then writes its closing balance straight into your net worth, so you only enter it once.
           </p>
           <div className="cf-trend-list">
             {trends.map(({ acct, pts }) => {

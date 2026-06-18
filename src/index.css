@@ -641,6 +641,13 @@ body[data-mode="budget"] .brand-sun { background: #FFF3D6; }
 .airbnb-tagged-row { grid-template-columns: 44px 24px 1fr auto 84px auto; }
 .airbnb-review-acts { display: flex; align-items: center; gap: 6px; justify-self: end; }
 
+/* the review card now leads the Airbnb view — a warm border so it reads as a
+   to-do, not just another section */
+.airbnb-review-card { border: 2px solid var(--warn-ink); background: var(--warn-bg); }
+/* "to review" count on the Airbnb tab so flagged lines are visible everywhere */
+.cf-review-flag { color: var(--warn-ink); font-weight: 700; }
+.cf-toggle-btn.active .cf-review-flag { color: #fff; }
+
 /* page controls under the long transaction lists */
 .airbnb-pager {
   display: flex; align-items: center; justify-content: center; gap: 14px;

@@ -8,6 +8,7 @@ import Import from './components/Import'
 import Budget from './components/Budget'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useBudget } from './hooks/useBudget'
+import { isCashAccount } from './lib/statements'
 
 const TABS = [
   { id: 'overview',  label: 'Overview'  },
@@ -38,10 +39,11 @@ export default function App() {
   const { accounts: budgetAccounts, accountBalance } = b
   const derivedCash = useMemo(() =>
     budgetAccounts
-      .filter(a => a.kind === 'checking' && !a.portfolioAccountId)
+      .filter(a => isCashAccount(a.kind) && !a.portfolioAccountId)
       .map(a => ({
         id: 'budget:' + a.id, budgetAccountId: a.id,
-        label: a.name, note: 'Joint day-to-day · synced from your statements',
+        label: a.name,
+        note: (a.kind === 'savings' ? 'Savings' : 'Joint day-to-day') + ' · synced from your statements',
         value: accountBalance(a.id), apy: null, source: 'budget',
       })),
     [budgetAccounts, accountBalance])
