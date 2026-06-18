@@ -132,6 +132,44 @@ export default function Airbnb({ b }) {
 
   return (
     <>
+      {/* needs manual review — first thing you see, so flagged lines (ambiguous
+          merchants like a family member's Zelle) never get buried at the bottom */}
+      {reviewRows.length > 0 && (
+        <Card className="airbnb-review-card">
+          <SectionLabel right={<Chip tone="warn">{reviewRows.length} to review</Chip>}>Needs manual review 🔍</SectionLabel>
+          <p className="reb-tip" style={{ marginBottom: 10 }}>
+            These come from merchants you flagged as “it depends” (like family). The AI
+            won’t guess — decide each one: <strong>House</strong> tags just this line to the
+            property, <strong>Personal</strong> leaves it out. New lines from the same merchant
+            keep landing here until you stop reviewing it.
+          </p>
+          <div className="cat-expand" style={{ background: 'transparent', border: 'none', padding: 0 }}>
+            {reviewPaged.slice.map(t => {
+              const acc = b.accounts.find(a => a.id === t.accountId);
+              return (
+                <div className="txrow airbnb-review-row" key={t.id}>
+                  <span className="mono tx-date">{dayLabel(t.date)}</span>
+                  <span title={acc?.name}>{acc?.emoji}</span>
+                  <span className="tx-desc">{t.desc}</span>
+                  <span className={'mono tx-amt' + (t.kind === 'income' ? ' up' : '')}>{fmt(t.amount)}</span>
+                  <div className="airbnb-review-acts">
+                    <button className="btn-soft on" style={{ padding: '3px 8px', fontSize: 12 }}
+                      title="This one belongs to the property"
+                      onClick={() => b.resolveReview(t.id, property.id)}>🏡 House</button>
+                    <button className="btn-soft" style={{ padding: '3px 8px', fontSize: 12 }}
+                      title="This one is personal — leave it out"
+                      onClick={() => b.resolveReview(t.id, null)}>👤 Personal</button>
+                    <button className="hold-del" title="Stop reviewing this merchant — let the AI tag it normally again"
+                      onClick={() => b.setMerchantReview(t.desc, false)}>✕</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <Pager {...reviewPaged} total={reviewRows.length} />
+        </Card>
+      )}
+
       {/* property switcher (only when more than one) */}
       {b.properties.length > 1 && (
         <div className="month-row">
@@ -251,43 +289,6 @@ export default function Airbnb({ b }) {
             {!taggedRows.length && <div className="hold-empty">No tagged matches — try another search.</div>}
           </div>
           <Pager {...taggedPaged} total={taggedRows.length} />
-        </Card>
-      )}
-
-      {/* needs manual review — ambiguous merchants the AI won't auto-decide */}
-      {reviewRows.length > 0 && (
-        <Card>
-          <SectionLabel right={<Chip tone="soft">{reviewRows.length} to review</Chip>}>Needs manual review 🔍</SectionLabel>
-          <p className="reb-tip" style={{ marginBottom: 10 }}>
-            These come from merchants you flagged as “it depends” (like family). The AI
-            won’t guess — decide each one: <strong>House</strong> tags just this line to the
-            property, <strong>Personal</strong> leaves it out. New lines from the same merchant
-            keep landing here until you stop reviewing it.
-          </p>
-          <div className="cat-expand" style={{ background: 'transparent', border: 'none', padding: 0 }}>
-            {reviewPaged.slice.map(t => {
-              const acc = b.accounts.find(a => a.id === t.accountId);
-              return (
-                <div className="txrow airbnb-review-row" key={t.id}>
-                  <span className="mono tx-date">{dayLabel(t.date)}</span>
-                  <span title={acc?.name}>{acc?.emoji}</span>
-                  <span className="tx-desc">{t.desc}</span>
-                  <span className={'mono tx-amt' + (t.kind === 'income' ? ' up' : '')}>{fmt(t.amount)}</span>
-                  <div className="airbnb-review-acts">
-                    <button className="btn-soft on" style={{ padding: '3px 8px', fontSize: 12 }}
-                      title="This one belongs to the property"
-                      onClick={() => b.resolveReview(t.id, property.id)}>🏡 House</button>
-                    <button className="btn-soft" style={{ padding: '3px 8px', fontSize: 12 }}
-                      title="This one is personal — leave it out"
-                      onClick={() => b.resolveReview(t.id, null)}>👤 Personal</button>
-                    <button className="hold-del" title="Stop reviewing this merchant — let the AI tag it normally again"
-                      onClick={() => b.setMerchantReview(t.desc, false)}>✕</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <Pager {...reviewPaged} total={reviewRows.length} />
         </Card>
       )}
 

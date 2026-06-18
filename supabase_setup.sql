@@ -50,3 +50,10 @@ insert into budget_state (id) values ('shared') on conflict do nothing;
 alter table budget_state
   add column if not exists properties     jsonb not null default '[]',
   add column if not exists property_rules jsonb not null default '[]';
+
+-- ── Smart rules (migration add_smart_rules_to_budget_state) ──
+-- User-built "description contains <phrase> → action" rules, managed in-app on
+-- the Budget → Rules tab. Checked before the built-in keyword categorizer.
+-- smart_rules: [{ id, contains, enabled, category, propertyId, scheduleE, review }]
+alter table budget_state
+  add column if not exists smart_rules jsonb not null default '[]';
