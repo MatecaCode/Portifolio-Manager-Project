@@ -162,9 +162,15 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
 
   // Link a checking account to a portfolio cash account and push its latest
   // balance over immediately so the two sides agree from the first click.
+  // When the link moves to a different account (or is removed), zero out the
+  // previously-linked one so its copied balance doesn't linger as a phantom
+  // duplicate in net worth.
   function handleLinkChange(budgetAccountId, portfolioAccountId) {
+    const prevId = b.accounts.find(a => a.id === budgetAccountId)?.portfolioAccountId || null;
     b.linkAccount(budgetAccountId, portfolioAccountId);
-    if (portfolioAccountId && syncAccountValue) {
+    if (!syncAccountValue) return;
+    if (prevId && prevId !== portfolioAccountId) syncAccountValue(prevId, 0);
+    if (portfolioAccountId) {
       const bal = b.accountBalance(budgetAccountId);
       if (bal != null) syncAccountValue(portfolioAccountId, bal);
     }
