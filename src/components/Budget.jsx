@@ -5,6 +5,7 @@ import { BUDGET_CATEGORIES, catById } from '../data/budget';
 import { parseStatement, isCashAccount } from '../lib/statements';
 import Cashflow from './Cashflow';
 import Airbnb from './Airbnb';
+import Rules, { RuleWizard } from './Rules';
 
 // Per-account-kind labels + emoji, shared by the profile cards and the import
 // preview so a new source only needs adding in one place.
@@ -51,7 +52,8 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
   const [openCat, setOpenCat] = useState(null);
   const [editBudgets, setEditBudgets] = useState(false);
   const [editTotal, setEditTotal] = useState(false);
-  const [view, setView] = useState('cashflow');   // 'cashflow' | 'spending' | 'airbnb'
+  const [view, setView] = useState('cashflow');   // 'cashflow' | 'spending' | 'airbnb' | 'rules'
+  const [ruleSeed, setRuleSeed] = useState(null); // open the rule wizard from a transaction
 
   // ── derived scope ──
   const selectedIds = useMemo(() => {
@@ -202,6 +204,7 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
 
   return (
     <div className="screen">
+      {ruleSeed && <RuleWizard b={b} seed={ruleSeed} onClose={() => setRuleSeed(null)} />}
       <div className="import-hero">
         <h2>The other half of the money story 💸</h2>
         <p>
@@ -258,6 +261,9 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
             <button className={'cf-toggle-btn' + (view === 'airbnb' ? ' active' : '')} onClick={() => setView('airbnb')}>
               🏡 Airbnb{reviewCount > 0 && <span className="cf-review-flag"> · 🔍 {reviewCount}</span>}
             </button>
+            <button className={'cf-toggle-btn' + (view === 'rules' ? ' active' : '')} onClick={() => setView('rules')}>
+              🧠 Rules{b.smartRules.length > 0 && <span className="cf-rule-count"> · {b.smartRules.length}</span>}
+            </button>
           </div>
 
           {view === 'cashflow' && (
@@ -265,6 +271,8 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
           )}
 
           {view === 'airbnb' && <Airbnb b={b} />}
+
+          {view === 'rules' && <Rules b={b} />}
 
           {view === 'spending' && (
           <>
@@ -418,17 +426,19 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
                         {catTxs.map(t => {
                           const acc = b.accounts.find(a => a.id === t.accountId);
                           return (
-                            <div className="txrow" key={t.id}>
+                            <div className="txrow txrow-spend" key={t.id}>
                               <span className="mono tx-date">{dayLabel(t.date)}</span>
                               <span title={acc?.name}>{acc?.emoji}</span>
                               <span className="tx-desc">{t.desc}</span>
                               <select className="tx-cat" value={t.category || 'other'}
                                 onClick={e => e.stopPropagation()}
                                 onChange={e => b.recategorize(t.id, e.target.value)}
-                                title="Filed in the wrong bucket? Move it.">
+                                title="Filed in the wrong bucket? Move it just this once.">
                                 {BUDGET_CATEGORIES.map(bc => <option key={bc.id} value={bc.id}>{bc.emoji} {bc.name}</option>)}
                               </select>
                               <span className={'mono tx-amt' + (t.amount < 0 ? ' up' : '')}>{fmt(t.amount)}</span>
+                              <button className="btn-soft tx-rule-btn" title="Make a reusable rule from this transaction"
+                                onClick={e => { e.stopPropagation(); setRuleSeed({ desc: t.desc, category: t.category }); }}>✨ Rule</button>
                             </div>
                           );
                         })}

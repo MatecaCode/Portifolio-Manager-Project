@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { merchantKey, suggestScheduleE, isAirbnbIncome, guessScheduleE, PROPERTY_DEFAULTS } from '../data/property'
+import { smartRuleMatches } from '../data/budget'
 
 const LS_KEY = 'budget_v1'
 
@@ -20,32 +21,60 @@ const ACCOUNT_DEFAULTS = {
   savings:  { emoji: '🏛️', label: 'Wealthfront Savings' },
 }
 
-// On import, auto-attribute the obvious house items + anything a learned
-// merchant rule already covers. Everything else stays personal (propertyId null)
-// until the user tags it. Only runs when a property exists to attribute to.
+// Apply the user's explicit "smart rules" (description contains <phrase> → do X)
+// to one transaction. Category applies to any expense; tag/review carry the same
+// meaning as the learned memory below. Used both on import and when a rule is
+// applied to existing transactions. Pass a single-rule array to apply just one.
+export function applySmartRules(tx, smartRules) {
+  let next = tx
+  if (next.kind === 'expense') {
+    const catRule = smartRules.find(r => r.category && smartRuleMatches(r, next))
+    if (catRule) next = { ...next, category: catRule.category }
+  }
+  if (next.kind === 'transfer') return next
+  // review wins — never auto-decide a merchant the user marked "it depends"
+  if (smartRules.some(r => r.review && smartRuleMatches(r, next))) {
+    return { ...next, propertyId: null, scheduleE: null, reviewFlag: true }
+  }
+  const tagRule = smartRules.find(r => r.propertyId && smartRuleMatches(r, next))
+  if (tagRule) {
+    return {
+      ...next, propertyId: tagRule.propertyId, reviewFlag: false,
+      scheduleE: tagRule.scheduleE || (next.kind === 'expense' ? guessScheduleE(next.category) : null),
+    }
+  }
+  return next
+}
+
+// On import, auto-attribute the obvious house items + anything a rule covers.
+// Order of authority: the user's explicit smart rules first, then the learned
+// merchant memory. Everything else stays personal (propertyId null) until tagged.
 //
-// Merchant rules come in two flavours:
+// Learned merchant rules come in two flavours:
 //   • a tag rule    { key, propertyId, scheduleE } — auto-files to the property
 //   • a review rule { key, action: 'review' }       — the merchant is ambiguous
 //        (e.g. a family member's Zelle), so instead of guessing, every matching
 //        line is flagged for manual review until the review tag is removed.
-function attributeTx(tx, defaultPropId, rules) {
-  if (!defaultPropId) return tx
-  if (tx.kind === 'transfer') return tx
-  const key = merchantKey(tx.desc)
-  // Review rules win: never auto-decide a merchant the user flagged as ambiguous.
-  if (rules.some(r => r.key === key && r.action === 'review')) {
-    return { ...tx, propertyId: null, scheduleE: null, reviewFlag: true }
+function attributeTx(tx, defaultPropId, propertyRules, smartRules = []) {
+  // 1) explicit user rules win (category + tag/review)
+  const next = applySmartRules(tx, smartRules)
+  if (next.reviewFlag || next.propertyId) return next
+  if (next.kind === 'transfer') return next
+  // 2) learned merchant memory — only when a property exists to attribute to
+  if (!defaultPropId) return next
+  const key = merchantKey(next.desc)
+  if (propertyRules.some(r => r.key === key && r.action === 'review')) {
+    return { ...next, propertyId: null, scheduleE: null, reviewFlag: true }
   }
-  if (tx.kind === 'income') {
-    return isAirbnbIncome(tx.desc) ? { ...tx, propertyId: defaultPropId, scheduleE: null } : tx
+  if (next.kind === 'income') {
+    return isAirbnbIncome(next.desc) ? { ...next, propertyId: defaultPropId, scheduleE: null } : next
   }
-  if (tx.kind !== 'expense') return tx
-  const auto = suggestScheduleE(tx.desc)
-  if (auto) return { ...tx, propertyId: defaultPropId, scheduleE: auto }
-  const rule = rules.find(r => r.key === key && r.action !== 'review')
-  if (rule) return { ...tx, propertyId: rule.propertyId, scheduleE: rule.scheduleE }
-  return tx
+  if (next.kind !== 'expense') return next
+  const auto = suggestScheduleE(next.desc)
+  if (auto) return { ...next, propertyId: defaultPropId, scheduleE: auto }
+  const rule = propertyRules.find(r => r.key === key && r.action !== 'review')
+  if (rule) return { ...next, propertyId: rule.propertyId, scheduleE: rule.scheduleE }
+  return next
 }
 
 export function useBudget() {
@@ -55,6 +84,7 @@ export function useBudget() {
   const [budgets, setBudgets]         = useState({}) // { total: n, perCat: { catId: n } }
   const [properties, setProperties]   = useState([]) // [{ id, name, emoji, state, ... }]
   const [propertyRules, setPropertyRules] = useState([]) // learned merchant→property memory
+  const [smartRules, setSmartRules]   = useState([]) // user-built "contains → action" rules
   const [syncStatus, setSyncStatus]   = useState('local')
   const [ready, setReady]             = useState(false)
   const saveTimer = useRef(null)
@@ -74,6 +104,7 @@ export function useBudget() {
             setBudgets(data.budgets || {})
             setProperties(data.properties || [])
             setPropertyRules(data.property_rules || [])
+            setSmartRules(data.smart_rules || [])
             setSyncStatus('synced')
             setReady(true)
             return
@@ -88,6 +119,7 @@ export function useBudget() {
         setBudgets(saved.budgets || {})
         setProperties(saved.properties || [])
         setPropertyRules(saved.propertyRules || [])
+        setSmartRules(saved.smartRules || [])
       }
       setSyncStatus('local')
       setReady(true)
@@ -95,8 +127,8 @@ export function useBudget() {
     init()
   }, [])
 
-  const persist = useCallback((acc, sts, txs, bud, props = properties, rules = propertyRules) => {
-    lsSave({ accounts: acc, statements: sts, transactions: txs, budgets: bud, properties: props, propertyRules: rules })
+  const persist = useCallback((acc, sts, txs, bud, props = properties, rules = propertyRules, srules = smartRules) => {
+    lsSave({ accounts: acc, statements: sts, transactions: txs, budgets: bud, properties: props, propertyRules: rules, smartRules: srules })
     if (!supabase) return
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
@@ -104,13 +136,13 @@ export function useBudget() {
       try {
         const { error } = await supabase.from('budget_state').upsert({
           id: 'shared', accounts: acc, statements: sts, transactions: txs, budgets: bud,
-          properties: props, property_rules: rules,
+          properties: props, property_rules: rules, smart_rules: srules,
           updated_at: new Date().toISOString(),
         })
         setSyncStatus(error ? 'error' : 'synced')
       } catch { setSyncStatus('error') }
     }, 800)
-  }, [properties, propertyRules])
+  }, [properties, propertyRules, smartRules])
 
   // ── Import a parsed statement. Returns a result summary. ──
   const importStatement = useCallback((parsed, accountName) => {
@@ -156,7 +188,7 @@ export function useBudget() {
     for (const t of parsed.transactions) {
       const base = { ...t, id: uid('tx'), accountId: account.id, statementId: statement.id, propertyId: null, scheduleE: null, reviewFlag: false }
       if (existing.has(txKey(base))) { dupes++; continue }
-      const tx = attributeTx(base, defaultPropId, propertyRules)
+      const tx = attributeTx(base, defaultPropId, propertyRules, smartRules)
       if (tx.propertyId) tagged++
       fresh.push(tx)
     }
@@ -172,7 +204,7 @@ export function useBudget() {
       added: fresh.length, dupes, tagged, accountId: account.id, statementId: statement.id,
       kind: parsed.kind, endingBalance: parsed.endingBalance ?? null, periodEnd: parsed.periodEnd,
     }
-  }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, smartRules, persist])
 
   // Latest known cash position for an account = ending balance of its most
   // recent statement. Cards never carry a balance (they owe, they don't hold).
@@ -257,9 +289,14 @@ export function useBudget() {
     const nextProps = properties.filter(p => p.id !== id)
     const nextTxs = transactions.map(t => t.propertyId === id ? { ...t, propertyId: null, scheduleE: null } : t)
     const nextRules = propertyRules.filter(r => r.propertyId !== id)
-    setProperties(nextProps); setTransactions(nextTxs); setPropertyRules(nextRules)
-    persist(accounts, statements, nextTxs, budgets, nextProps, nextRules)
-  }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
+    // drop the house-tag from any smart rule pointing here; keep the rule only
+    // if it still does something (sets a category or sends to review)
+    const nextSmart = smartRules
+      .map(r => r.propertyId === id ? { ...r, propertyId: null, scheduleE: null } : r)
+      .filter(r => r.category || r.review || r.propertyId)
+    setProperties(nextProps); setTransactions(nextTxs); setPropertyRules(nextRules); setSmartRules(nextSmart)
+    persist(accounts, statements, nextTxs, budgets, nextProps, nextRules, nextSmart)
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, smartRules, persist])
 
   // Tag (or untag) a transaction to a property. Tagging an expense also teaches
   // the merchant-memory rule so the same vendor auto-files next time.
@@ -319,13 +356,60 @@ export function useBudget() {
     persist(accounts, statements, nextTxs, budgets, properties, propertyRules)
   }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
 
+  // ── smart rules (user-built "description contains → action") ──
+  // Create a rule and, by default, sweep it across existing transactions too so
+  // the user sees it take effect immediately (not just on the next import).
+  const addSmartRule = useCallback((rule, applyExisting = true) => {
+    const r = {
+      id: uid('srule'), enabled: true, contains: '',
+      category: null, propertyId: null, scheduleE: null, review: false,
+      ...rule,
+    }
+    const nextRules = [...smartRules, r]
+    const nextTxs = applyExisting
+      ? transactions.map(t => smartRuleMatches(r, t) ? applySmartRules(t, [r]) : t)
+      : transactions
+    setSmartRules(nextRules)
+    setTransactions(nextTxs)
+    persist(accounts, statements, nextTxs, budgets, properties, propertyRules, nextRules)
+    return r
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, smartRules, persist])
+
+  const updateSmartRule = useCallback((id, patch) => {
+    const nextRules = smartRules.map(r => r.id === id ? { ...r, ...patch } : r)
+    setSmartRules(nextRules)
+    persist(accounts, statements, transactions, budgets, properties, propertyRules, nextRules)
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, smartRules, persist])
+
+  const removeSmartRule = useCallback(id => {
+    const nextRules = smartRules.filter(r => r.id !== id)
+    setSmartRules(nextRules)
+    persist(accounts, statements, transactions, budgets, properties, propertyRules, nextRules)
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, smartRules, persist])
+
+  // Re-apply one rule to every existing transaction it matches; returns the count.
+  const applySmartRule = useCallback(id => {
+    const r = smartRules.find(x => x.id === id)
+    if (!r) return 0
+    let count = 0
+    const nextTxs = transactions.map(t => {
+      if (!smartRuleMatches(r, t)) return t
+      count++
+      return applySmartRules(t, [r])
+    })
+    setTransactions(nextTxs)
+    persist(accounts, statements, nextTxs, budgets, properties, propertyRules, smartRules)
+    return count
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, smartRules, persist])
+
   return {
     ready, syncStatus,
-    accounts, statements, transactions, budgets, properties, propertyRules,
+    accounts, statements, transactions, budgets, properties, propertyRules, smartRules,
     importStatement, renameAccount, removeStatement, recategorize,
     setTotalBudget, setCategoryBudget,
     addProperty, updateProperty, removeProperty, tagTransaction,
     setMerchantReview, resolveReview,
+    addSmartRule, updateSmartRule, removeSmartRule, applySmartRule,
     accountBalance, linkAccount,
   }
 }
