@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { merchantKey, suggestScheduleE, isAirbnbIncome, guessScheduleE, PROPERTY_DEFAULTS } from '../data/property'
+import { merchantKey, suggestScheduleE, isAirbnbIncome, guessScheduleE, PROPERTY_DEFAULTS, TAX_DEFAULTS } from '../data/property'
 import { smartRuleMatches } from '../data/budget'
 
 const LS_KEY = 'budget_v1'
@@ -285,6 +285,26 @@ export function useBudget() {
     persist(accounts, statements, transactions, budgets, next, propertyRules)
   }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
 
+  // Patch a property's tax-engine inputs (Phase 3). Deep-merges the two nested
+  // objects (form1098, escrow) so a partial patch never wipes the other fields,
+  // and backfills TAX_DEFAULTS for properties created before the tax phase.
+  const updatePropertyTax = useCallback((id, patch = {}) => {
+    const next = properties.map(p => {
+      if (p.id !== id) return p
+      const prev = p.tax || {}
+      return {
+        ...p,
+        tax: {
+          ...TAX_DEFAULTS, ...prev, ...patch,
+          form1098: { ...TAX_DEFAULTS.form1098, ...prev.form1098, ...(patch.form1098 || {}) },
+          escrow: { ...TAX_DEFAULTS.escrow, ...prev.escrow, ...(patch.escrow || {}) },
+        },
+      }
+    })
+    setProperties(next)
+    persist(accounts, statements, transactions, budgets, next, propertyRules)
+  }, [accounts, statements, transactions, budgets, properties, propertyRules, persist])
+
   const removeProperty = useCallback(id => {
     const nextProps = properties.filter(p => p.id !== id)
     const nextTxs = transactions.map(t => t.propertyId === id ? { ...t, propertyId: null, scheduleE: null } : t)
@@ -407,7 +427,7 @@ export function useBudget() {
     accounts, statements, transactions, budgets, properties, propertyRules, smartRules,
     importStatement, renameAccount, removeStatement, recategorize,
     setTotalBudget, setCategoryBudget,
-    addProperty, updateProperty, removeProperty, tagTransaction,
+    addProperty, updateProperty, updatePropertyTax, removeProperty, tagTransaction,
     setMerchantReview, resolveReview,
     addSmartRule, updateSmartRule, removeSmartRule, applySmartRule,
     accountBalance, linkAccount,

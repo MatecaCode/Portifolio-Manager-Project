@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Card, Chip, Donut, ProgressBar, SectionLabel, Term } from './ui';
 import { fmt, fmt0 } from '../lib/format';
 import { SCHEDULE_E_CATEGORIES, PROPERTY_DEFAULTS } from '../data/property';
+import TaxReport from './TaxReport';
 
 // The Airbnb section — a property-focused carve-out of the budget. It shows
 // only the money tagged to a property (rental income + deductible expenses),
@@ -44,6 +45,7 @@ export default function Airbnb({ b }) {
   const [month, setMonth] = useState('all');
   const [query, setQuery] = useState('');
   const [tagQuery, setTagQuery] = useState('');
+  const [taxView, setTaxView] = useState('overview'); // 'overview' | 'taxes'
 
   const property = b.properties.find(p => p.id === activeId) || b.properties[0] || null;
 
@@ -132,6 +134,27 @@ export default function Airbnb({ b }) {
 
   return (
     <>
+      {/* property switcher — shared by both views (only when more than one) */}
+      {b.properties.length > 1 && (
+        <div className="month-row">
+          {b.properties.map(p => (
+            <button key={p.id} className={'month-chip' + (p.id === property.id ? ' active' : '')} onClick={() => setActiveId(p.id)}>
+              {p.emoji} {p.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Overview ⇄ Taxes — the tax engine reuses this property's tagged data */}
+      <div className="cf-toggle">
+        <button className={'cf-toggle-btn' + (taxView === 'overview' ? ' active' : '')} onClick={() => setTaxView('overview')}>🏡 Overview</button>
+        <button className={'cf-toggle-btn' + (taxView === 'taxes' ? ' active' : '')} onClick={() => setTaxView('taxes')}>🧮 Taxes</button>
+      </div>
+
+      {taxView === 'taxes' ? (
+        <TaxReport key={property.id} b={b} property={property} />
+      ) : (
+        <>
       {/* needs manual review — first thing you see, so flagged lines (ambiguous
           merchants like a family member's Zelle) never get buried at the bottom */}
       {reviewRows.length > 0 && (
@@ -168,17 +191,6 @@ export default function Airbnb({ b }) {
           </div>
           <Pager {...reviewPaged} total={reviewRows.length} />
         </Card>
-      )}
-
-      {/* property switcher (only when more than one) */}
-      {b.properties.length > 1 && (
-        <div className="month-row">
-          {b.properties.map(p => (
-            <button key={p.id} className={'month-chip' + (p.id === property.id ? ' active' : '')} onClick={() => setActiveId(p.id)}>
-              {p.emoji} {p.name}
-            </button>
-          ))}
-        </div>
       )}
 
       {/* month picker */}
@@ -326,6 +338,8 @@ export default function Airbnb({ b }) {
         </div>
         <Pager {...findPaged} total={untagged.length} />
       </Card>
+        </>
+      )}
     </>
   );
 }
