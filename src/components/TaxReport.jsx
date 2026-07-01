@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Card, Chip, Donut, SectionLabel, Term } from './ui';
 import { fmt0 } from '../lib/format';
 import { TAX_DEFAULTS, scheduleEById } from '../data/property';
+import { sourceById, GLOSSARY_GROUPS } from '../data/taxSources';
 import {
   scheduleESummary, buildingBasis, missingInputs, isReportFinal, setAside,
   personalUseFlag, palAllowance, niitApplies, shortTermExceptionPossible, yearOf,
@@ -42,6 +43,38 @@ function NumField({ label, tip, value, onCommit, placeholder, suffix }) {
   );
 }
 
+// CPA assistant — a "📚" cite that opens the official IRS source behind a line
+// or section, and the modal that shows the plain-English rule + the .gov links.
+function Cite({ id, onOpen }) {
+  if (!sourceById(id)) return null;
+  return (
+    <button type="button" className="tax-cite" title="Show the official IRS source behind this"
+      onClick={() => onOpen(id)}>📚</button>
+  );
+}
+
+function SourceModal({ id, onClose }) {
+  const s = sourceById(id);
+  if (!s) return null;
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="card modal-card tax-source-modal" onClick={e => e.stopPropagation()}>
+        <SectionLabel right={<Chip tone="soft">📚 official source</Chip>}>{s.title}</SectionLabel>
+        <p className="tax-source-plain">{s.plain}</p>
+        <div className="tax-source-links">
+          {s.authority.map((a, i) => (
+            <a key={i} className="tax-source-link" href={a.url} target="_blank" rel="noopener noreferrer">🔗 {a.label}</a>
+          ))}
+        </div>
+        <p className="reb-tip" style={{ marginTop: 12 }}>These links show the rule exists — whether it applies to your facts is your CPA’s call. Not tax advice.</p>
+        <div className="pending-actions" style={{ marginTop: 12 }}>
+          <button className="btn-soft" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TaxReport({ b, property }) {
   // Merge stored tax inputs over the defaults so properties created before the
   // tax phase still render. Memoized on property.tax so the heavy summary below
@@ -66,6 +99,7 @@ export default function TaxReport({ b, property }) {
 
   const [yearSel, setYearSel] = useState(null);
   const year = yearSel && years.includes(yearSel) ? yearSel : years[0];
+  const [cite, setCite] = useState(null); // open source-citation modal (CPA assistant)
 
   const summary = useMemo(
     () => scheduleESummary({ transactions: b.transactions, property, tax, year }),
@@ -227,6 +261,7 @@ export default function TaxReport({ b, property }) {
 
   return (
     <div className="tax-report">
+      {cite && <SourceModal id={cite} onClose={() => setCite(null)} />}
       {/* disclaimer — always visible */}
       <div className="explainer tax-disclaimer">
         <p><strong>🧾 Bookkeeping tool — not tax advice.</strong> Every figure here is an
@@ -292,7 +327,7 @@ export default function TaxReport({ b, property }) {
 
       {/* Schedule E line items */}
       <Card>
-        <SectionLabel right={<Chip tone="soft">{summary.txCount} txns · {year}</Chip>}>Schedule E line items</SectionLabel>
+        <SectionLabel right={<><Cite id="schedule_e" onOpen={setCite} /><Chip tone="soft">{summary.txCount} txns · {year}</Chip></>}>Schedule E line items</SectionLabel>
         <div className="cat-list">
           {summary.lines.map(l => (
             <div className="cat-row" key={l.id}>
@@ -304,6 +339,7 @@ export default function TaxReport({ b, property }) {
                 {l.id === 'taxes' && summary.mortgage.toLine16 > 0 && <span className="cat-sub">includes escrowed property tax</span>}
                 {l.id === 'insurance' && summary.mortgage.toLine9 > 0 && <span className="cat-sub">includes escrowed insurance</span>}
               </div>
+              <Cite id={l.id} onOpen={setCite} />
               <div className="cat-vals"><div className="cat-value mono">{fmt0(l.amount)}</div></div>
             </div>
           ))}
@@ -322,7 +358,7 @@ export default function TaxReport({ b, property }) {
 
       {/* Depreciation calculator */}
       <Card>
-        <SectionLabel right={<Chip tone={final ? 'soft' : 'warn'}>{final ? 'confirmed' : 'estimate'}</Chip>}>Depreciation calculator</SectionLabel>
+        <SectionLabel right={<><Cite id="depreciation" onOpen={setCite} /><Chip tone={final ? 'soft' : 'warn'}>{final ? 'confirmed' : 'estimate'}</Chip></>}>Depreciation calculator</SectionLabel>
         <p className="reb-tip" style={{ marginBottom: 12 }}>
           Residential rental depreciates straight-line over 27.5 years; land isn’t depreciable.
           Because this was your home before it became a rental, the basis is the{' '}
@@ -381,7 +417,7 @@ export default function TaxReport({ b, property }) {
 
       {/* Mortgage interest split */}
       <Card>
-        <SectionLabel>Mortgage split (from Form 1098 &amp; escrow)</SectionLabel>
+        <SectionLabel right={<Cite id="mortgage_split" onOpen={setCite} />}>Mortgage split (from Form 1098 &amp; escrow)</SectionLabel>
         <p className="reb-tip" style={{ marginBottom: 12 }}>
           The one ~{fmt0(property.monthlyPayment || 0)}/mo PITI line is four things. Only three are
           deductible, and they land on different Schedule E lines — entered from the statement, never
@@ -409,7 +445,7 @@ export default function TaxReport({ b, property }) {
 
       {/* Filer & participation */}
       <Card>
-        <SectionLabel>Filer &amp; participation</SectionLabel>
+        <SectionLabel right={<Cite id="passive_loss" onOpen={setCite} />}>Filer &amp; participation</SectionLabel>
         <div className="tax-grid">
           <label className="tax-field">
             <span className="tax-field-label">Filing status</span>
@@ -442,7 +478,7 @@ export default function TaxReport({ b, property }) {
 
       {/* Personal use (§280A) */}
       <Card>
-        <SectionLabel right={<Chip tone={pu.usedAsHome ? 'warn' : 'soft'}>{pu.usedAsHome ? 'may limit deductions' : 'within limits'}</Chip>}>Personal use (§280A)</SectionLabel>
+        <SectionLabel right={<><Cite id="personal_use" onOpen={setCite} /><Chip tone={pu.usedAsHome ? 'warn' : 'soft'}>{pu.usedAsHome ? 'may limit deductions' : 'within limits'}</Chip></>}>Personal use (§280A)</SectionLabel>
         <div className="tax-grid">
           <NumField label="Personal-use days" value={tax.personalUseDays} placeholder="0" suffix="d"
             tip="Nights you, family, or friends stayed at below-market rates. Normally 0 since you don't live there."
@@ -471,6 +507,35 @@ export default function TaxReport({ b, property }) {
             </div>
           ))}
         </div>
+      </Card>
+
+      {/* CPA assistant — sources & authority glossary */}
+      <Card>
+        <SectionLabel right={<Chip tone="soft">📚 official sources</Chip>}>CPA assistant — sources &amp; authority</SectionLabel>
+        <p className="reb-tip" style={{ marginBottom: 14 }}>
+          Every category and calculation paired with the government source that backs it — tap 📚 anywhere
+          above to jump to a rule. These prove the rule <em>exists</em>; your CPA confirms it fits your facts.
+        </p>
+        {GLOSSARY_GROUPS.map(g => (
+          <div className="tax-gloss-group" key={g.label}>
+            <div className="tax-gloss-grouplabel">{g.label}</div>
+            {g.ids.map(id => {
+              const s = sourceById(id);
+              if (!s) return null;
+              return (
+                <div className="tax-gloss-row" key={id}>
+                  <div className="tax-gloss-title">{s.title}</div>
+                  <p className="tax-gloss-plain">{s.plain}</p>
+                  <div className="tax-source-links">
+                    {s.authority.map((a, i) => (
+                      <a key={i} className="tax-source-link" href={a.url} target="_blank" rel="noopener noreferrer">🔗 {a.label}</a>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </Card>
 
       {/* confirm gate */}

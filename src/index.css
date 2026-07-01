@@ -859,3 +859,25 @@ body[data-mode="budget"] .brand-sun { background: #FFF3D6; }
   .tax-ci-row { grid-template-columns: 1fr 84px 128px 24px; }
   .tax-head-actions { width: 100%; }
 }
+
+/* ---------- CPA assistant (source citations + glossary) ---------- */
+.tax-cite { border: none; background: transparent; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 5px; border-radius: 6px; opacity: 0.5; flex-shrink: 0; }
+.tax-cite:hover { opacity: 1; background: var(--accent-faint); }
+
+.tax-source-modal { max-width: 480px; }
+.tax-source-plain { font-size: 13.5px; color: color-mix(in oklch, var(--ink) 85%, var(--muted)); margin: 4px 0 12px; }
+.tax-source-links { display: flex; flex-direction: column; gap: 8px; }
+.tax-source-link {
+  font-size: 13px; font-weight: 600; color: var(--accent-deep); text-decoration: none;
+  border: 1px solid var(--accent-soft); background: var(--accent-faint);
+  border-radius: 10px; padding: 9px 12px; transition: all 0.15s ease;
+}
+.tax-source-link:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+.tax-gloss-grouplabel { font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 16px 0 6px; }
+.tax-gloss-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.tax-gloss-row:last-child { border-bottom: none; }
+.tax-gloss-title { font-weight: 700; font-size: 13.5px; }
+.tax-gloss-plain { font-size: 12.5px; color: color-mix(in oklch, var(--ink) 80%, var(--muted)); margin: 3px 0 8px; }
+.tax-gloss-row .tax-source-links { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+.tax-gloss-row .tax-source-link { padding: 5px 10px; font-size: 12px; }
