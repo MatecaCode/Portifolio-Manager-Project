@@ -44,9 +44,19 @@ create policy "allow all"
 insert into budget_state (id) values ('shared') on conflict do nothing;
 
 -- ── Airbnb / property module (migration add_properties_to_budget_state) ──
--- properties:     [{ id, name, emoji, state, type, placedInService, purchasePrice, landPct, monthlyPayment, active }]
+-- properties:     [{ id, name, emoji, address, state, type, placedInService,
+--                    purchasePrice, landPct, monthlyPayment, active, tax }]
 -- property_rules: learned merchant→property memory [{ id, key, propertyId, scheduleE }]
 -- Per-transaction attribution (propertyId, scheduleE) lives inside the transactions blob.
+--
+-- Phase 3 (tax engine) adds a `tax` sub-object INSIDE each property — no new column,
+-- it rides along in the existing properties JSONB:
+--   tax: { fmvAtConversion, landValue, buildingBasisOverride, businessUsePct,
+--          capitalImprovements: [{ id, desc, amount, placedInService }],
+--          form1098: { mortgageInterest, points },
+--          escrow:   { propertyTax, insurance },
+--          personalUseDays, fairRentalDays, avgStayDays,
+--          filingStatus, marginalRatePct, magi, materiallyParticipates, confirmed }
 alter table budget_state
   add column if not exists properties     jsonb not null default '[]',
   add column if not exists property_rules jsonb not null default '[]';

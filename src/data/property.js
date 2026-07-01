@@ -24,16 +24,48 @@ export const SCHEDULE_E_CATEGORIES = [
   { id: 'auto_travel',       emoji: '🚗',  name: 'Auto & travel',          color: '#6FA8C9' },
   { id: 'legal',             emoji: '⚖️',  name: 'Legal & professional',   color: '#B0876B' },
   { id: 'other',             emoji: '🧾',  name: 'Other',                  color: '#A8A29A' },
+  // Not a Schedule E line — a deliberate holding state. Anything genuinely
+  // ambiguous stays here (excluded from report totals) until a CPA rules on it,
+  // rather than being force-fit into a deductible category.
+  { id: 'unclassified',      emoji: '🚧',  name: 'Unclassified — needs CPA', color: '#C08552' },
 ]
 
 export const scheduleEById = id =>
-  SCHEDULE_E_CATEGORIES.find(c => c.id === id) || SCHEDULE_E_CATEGORIES[SCHEDULE_E_CATEGORIES.length - 1]
+  SCHEDULE_E_CATEGORIES.find(c => c.id === id) ||
+  SCHEDULE_E_CATEGORIES.find(c => c.id === 'other')
 
-// Sensible defaults for the one property we have today (Texas house). All
-// figures are editable in the UI — see the plan's "known inputs" table.
+// The tax-engine inputs that hang off a property (Phase 3). Every dollar figure
+// here is an ESTIMATE until the user ticks `confirmed`; the report stays
+// watermarked draft and never treats these as final. Sourced from Form 1098, the
+// year-end escrow analysis, and the county appraisal (Collin CAD) — not guessed.
+export const TAX_DEFAULTS = {
+  // Depreciation basis (converted primary residence → lesser-of-basis rule).
+  fmvAtConversion: null,        // FMV on the date it became a rental
+  landValue: null,             // $ land from the county allocation (else landPct)
+  buildingBasisOverride: null, // manual override if the CPA gives a figure
+  businessUsePct: 100,         // <100 only if personal use applies (§280A)
+  capitalImprovements: [],     // [{ id, desc, amount, placedInService }] each own 27.5-yr clock
+  // Mortgage split (Form 1098 + escrow analysis).
+  form1098: { mortgageInterest: null, points: null },
+  escrow: { propertyTax: null, insurance: null },
+  // §280A personal-use tracking (normally 0 here — not owner-occupied).
+  personalUseDays: 0,
+  fairRentalDays: null,
+  avgStayDays: null,           // ≤7 gates the short-term-rental exception question
+  // Filer (one property, one filer today; lifted out if multi-property later).
+  filingStatus: 'single',
+  marginalRatePct: 24,
+  magi: null,
+  materiallyParticipates: null, // null = undecided → CPA flag, never auto-set
+  confirmed: false,
+}
+
+// Sensible defaults for the one property we have today. All figures are editable
+// in the UI and clearly labeled as estimates — see the plan's "known inputs" table.
 export const PROPERTY_DEFAULTS = {
   name: 'Texas House',
   emoji: '🏡',
+  address: '529 English Oak Dr, Allen, TX',
   state: 'TX',
   type: 'airbnb',
   placedInService: '2026-06-16',
@@ -41,6 +73,7 @@ export const PROPERTY_DEFAULTS = {
   landPct: 20,            // % of price that's land (not depreciable)
   monthlyPayment: 3100,   // PITI — split happens in the tax phase
   active: true,
+  tax: TAX_DEFAULTS,
 }
 
 // Person-to-person payment rails. For these the "merchant" is the COUNTERPARTY,
