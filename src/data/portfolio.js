@@ -84,6 +84,35 @@ export const TICKER_INFO = {
   AVAX:   { title: 'Avalanche', text: 'A newer blockchain network competing with Ethereum on speed and cost; AVAX is its native coin.', link: 'https://www.coingecko.com/en/coins/avalanche-2' },
 };
 
+// ── Investments for Review ──────────────────────────────────────────────
+// A staging list of candidate investments that Matheus & Melanie review and
+// approve before they ever touch the real portfolio. Each carries a suggested
+// group, a recommended weight *within* that group, and a plain-English thesis.
+// Approving one drops it into Holdings as a 0-share watchlist entry (prices
+// then populate live); rejecting one removes it. Seeded from the water + rare-
+// earth AI-infrastructure research so there's something to react to on day one.
+const rvid = () => 'r_' + Math.random().toString(36).slice(2, 9);
+const mkr = (ticker, name, category, theme, groupPct, thesis, link = null) =>
+  ({ id: rvid(), ticker, name, category, theme, groupPct, thesis, link, source: 'Claude research' });
+
+export const SEED_REVIEWS = [
+  mkr('XYL', 'Xylem', 'us_stocks', 'Water', 10,
+    'Water pumps, filtration and treatment tech. Direct AI-data-center exposure — expanded a build/operate water-systems partnership with Dow in 2026. Recurring revenue, not one-time equipment.',
+    'https://www.google.com/finance/quote/XYL:NYSE'),
+  mkr('ECL', 'Ecolab', 'us_stocks', 'Water', 8,
+    'Runs a "cooling-as-a-service" program for high-density AI facilities, blending water + cooling management. Sticky, recurring chemistry-and-service revenue.',
+    'https://www.google.com/finance/quote/ECL:NYSE'),
+  mkr('PHO', 'Invesco Water Resources ETF', 'us_stocks', 'Water', 12,
+    'A basket of water-infrastructure companies in one buy — the lower-risk way to own the "AI needs water" theme without picking a single winner.',
+    'https://www.google.com/finance/quote/PHO:NYSEARCA'),
+  mkr('MP', 'MP Materials', 'us_stocks', 'Rare earths', 12,
+    'The only active US rare-earth mine AND a magnet plant — owns processing, the real moat. Has a US Dept. of War price floor on NdPr plus an Apple offtake deal, which neutralizes China\'s price-war risk. The de-risked pick.',
+    'https://www.google.com/finance/quote/MP:NYSE'),
+  mkr('REMX', 'VanEck Rare Earth/Strategic Metals ETF', 'us_stocks', 'Rare earths', 10,
+    'Diversified rare-earth & strategic-metals basket. Spreads the single-company risk of a volatile, geopolitics-driven sector (note: holds some Chinese names).',
+    'https://www.google.com/finance/quote/REMX:NYSEARCA'),
+];
+
 export const CASH_ACCOUNTS = [
   { id: 'wealthfront',   label: 'Wealthfront (Joint)',        value: 12513.43, apy: 4.05, note: 'Emergency fund — Melanie & Matheus' },
   { id: 'chase_mat',     label: 'Chase Checking — Matheus',   value: 0, apy: null, note: 'Day-to-day spending' },

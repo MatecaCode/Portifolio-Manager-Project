@@ -4,6 +4,7 @@ import Overview from './components/Overview'
 import Growth from './components/Growth'
 import Holdings from './components/Holdings'
 import Rebalance from './components/Rebalance'
+import Review from './components/Review'
 import Import from './components/Import'
 import Budget from './components/Budget'
 import { usePortfolio } from './hooks/usePortfolio'
@@ -15,6 +16,7 @@ const TABS = [
   { id: 'growth',    label: 'Growth'    },
   { id: 'holdings',  label: 'Holdings'  },
   { id: 'rebalance', label: 'Rebalance' },
+  { id: 'review',    label: 'Review'    },
   { id: 'import',    label: 'Import'    },
 ]
 
@@ -99,6 +101,7 @@ export default function App() {
             {tab === 'growth'    && <Growth    holdings={p.holdings} categoryTotals={p.categoryTotals} holdingCost={p.holdingCost} accounts={[...p.accounts, ...derivedCash]} />}
             {tab === 'holdings'  && <Holdings  holdings={p.holdings} addHolding={p.addHolding} updateHolding={p.updateHolding} removeHolding={p.removeHolding} toggleTag={p.toggleTag} holdingValue={p.holdingValue} holdingCost={p.holdingCost} priceErrors={p.priceErrors} focusCategory={focusCat} onFocusHandled={() => setFocusCat(null)} />}
             {tab === 'rebalance' && <Rebalance holdings={p.holdings} targets={p.targets} categoryTotals={p.categoryTotals} updateTarget={p.updateTarget} holdingValue={p.holdingValue} />}
+            {tab === 'review'    && <Review reviews={p.reviews} addReview={p.addReview} updateReview={p.updateReview} rejectReview={p.rejectReview} approveReview={p.approveReview} />}
             {tab === 'import'    && <Import />}
           </main>
         </>
