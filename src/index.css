@@ -51,6 +51,39 @@ main { display: block; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
 
+/* ---------- sign-in gate ---------- */
+.login-screen {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.login-card { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; }
+.login-brand { display: flex; align-items: center; gap: 12px; }
+.login-intro { font-size: 13.5px; color: var(--muted); }
+.login-field { display: flex; flex-direction: column; gap: 5px; }
+.login-label { font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.login-input {
+  border: 1px solid var(--line); border-radius: 11px;
+  padding: 10px 12px; font-size: 14px;
+  background: var(--bg); color: var(--ink);
+  width: 100%;
+}
+.login-input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.login-error {
+  font-size: 12.5px; font-weight: 600;
+  color: var(--warn-ink); background: var(--warn-bg);
+  border-radius: 10px; padding: 9px 12px;
+}
+.login-btn {
+  border: none; border-radius: 999px;
+  background: var(--accent); color: #fff;
+  padding: 11px 18px; font-size: 14.5px; font-weight: 600;
+  transition: all 0.15s ease;
+}
+.login-btn:hover:not(:disabled) { background: var(--accent-deep); }
+.login-btn:disabled { opacity: 0.55; cursor: default; }
+.login-foot { font-size: 11.5px; color: var(--muted); text-align: center; }
+
 /* ---------- top bar ---------- */
 .topbar { display: flex; align-items: center; justify-content: space-between; padding: 6px 0 18px; }
 .brand { display: flex; align-items: center; gap: 12px; }

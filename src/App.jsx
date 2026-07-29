@@ -7,8 +7,10 @@ import Rebalance from './components/Rebalance'
 import Review from './components/Review'
 import Import from './components/Import'
 import Budget from './components/Budget'
+import Login from './components/Login'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useBudget } from './hooks/useBudget'
+import { useAuth } from './hooks/useAuth'
 import { isCashAccount } from './lib/statements'
 
 const TABS = [
@@ -20,7 +22,25 @@ const TABS = [
   { id: 'import',    label: 'Import'    },
 ]
 
+function Splash({ children }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', color:'var(--muted)', fontFamily:'var(--font-mono)', fontSize:13 }}>
+      {children}
+    </div>
+  )
+}
+
+// The gate lives above Dashboard rather than inside it so the portfolio and
+// budget hooks — which start fetching from Supabase the moment they mount —
+// never run for a signed-out visitor.
 export default function App() {
+  const auth = useAuth()
+  if (auth.checking) return <Splash>Checking sign-in…</Splash>
+  if (auth.required && !auth.session) return <Login signIn={auth.signIn} />
+  return <Dashboard onSignOut={auth.required ? auth.signOut : null} />
+}
+
+function Dashboard({ onSignOut }) {
   const [tab, setTab] = useState(() => {
     const saved = localStorage.getItem('sg_tab')
     return TABS.some(t => t.id === saved) ? saved : 'overview'
@@ -61,13 +81,7 @@ export default function App() {
     setTab('holdings')
   }
 
-  if (!p.ready) {
-    return (
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', color:'var(--muted)', fontFamily:'var(--font-mono)', fontSize:13 }}>
-        Loading portfolio…
-      </div>
-    )
-  }
+  if (!p.ready) return <Splash>Loading portfolio…</Splash>
 
   return (
     <div className="app">
@@ -78,6 +92,7 @@ export default function App() {
         onRefresh={p.manualRefresh}
         mode={mode}
         setMode={setMode}
+        onSignOut={onSignOut}
       />
       {mode === 'budget' ? (
         <main>
