@@ -88,7 +88,7 @@ export default function Rebalance({ targets, categoryTotals, updateTarget }) {
             <Card className="reb-card" key={cat.id}>
               <div className="reb-card-head">
                 <CatDot color={cat.color} size={10} />
-                <span className="reb-card-name">{cat.name}</span>
+                <span className="reb-card-name"><Term tip={cat.blurb}>{cat.name}</Term></span>
                 <label className="reb-target">
                   Target
                   <input type="number" className="reb-input mono" value={targets[cat.id]} min="0" max="100" step="0.5"

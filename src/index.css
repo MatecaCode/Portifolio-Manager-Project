@@ -18,12 +18,22 @@
   --radius: 18px;
   --font-head: "Albert Sans", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
+  /* buckets — what kind of bet it is */
   --cat-crypto: #F0937A;
-  --cat-br: #3E9B8F;
+  --cat-stocks: #3E9B8F;
   --cat-fii: #9C8EC9;
   --cat-rf: #8FAE9B;
-  --cat-us: #6FA8C9;
   --cat-intl: #E5B45E;
+  --cat-energy: #D9903A;
+  --cat-water: #6FA8C9;
+  --cat-rare: #8A93A6;
+  /* stickers — where it trades */
+  --reg-us: #4C7FA8;
+  --reg-br: #2FA36B;
+  --reg-china: #C9564E;
+  --reg-japan: #C97F9B;
+  --reg-europe: #7B6FC9;
+  --reg-global: #8FA8A3;
   --shadow: 0 1px 2px rgba(31,58,56,0.04), 0 4px 16px rgba(31,58,56,0.05);
 }
 
@@ -196,8 +206,46 @@ main { display: block; }
   border: none;
 }
 .tag-fc { background: #EEE9F8; color: #6B57A8; }
-.tag-en { background: #FBF1DC; color: #9A7224; }
 .tag-off { background: var(--bg); color: var(--muted); border: 1px dashed var(--line); cursor: pointer; }
+
+/* ---------- country stickers ---------- */
+.region-badge {
+  position: relative;
+  display: inline-flex; align-items: center;
+  font-family: var(--font-mono);
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em;
+  border-radius: 5px; padding: 2px 5px;
+  cursor: help; border: none; white-space: nowrap;
+}
+.region-badge:hover .term-tip, .region-badge:focus .term-tip {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+.region-select {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em;
+  border: none; border-radius: 5px; padding: 3px 4px;
+  cursor: pointer; appearance: none; text-align: center;
+}
+.region-select:focus { outline: 2px solid var(--accent); }
+.region-us,     select.region-us     { background: #E4EFF7; color: #31658C; }
+.region-br,     select.region-br     { background: #E1F3E9; color: #237A50; }
+.region-china,  select.region-china  { background: #FBE8E6; color: #A8433C; }
+.region-japan,  select.region-japan  { background: #FBE9EF; color: #A5566F; }
+.region-europe, select.region-europe { background: #EBE8F8; color: #5A4FA0; }
+.region-global, select.region-global { background: #E9F0EF; color: #5C7C77; }
+
+.region-split { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.region-split-label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 8px;
+}
+.region-bar { display: flex; height: 9px; border-radius: 999px; overflow: hidden; background: var(--accent-soft); }
+.region-bar-seg { height: 100%; transition: width 0.4s ease; }
+.region-split-legend {
+  display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 9px;
+  font-size: 12px; color: var(--muted);
+}
 
 .explainer {
   background: var(--accent-faint);
@@ -388,7 +436,10 @@ main { display: block; }
 .hold-group { padding: 18px 22px; }
 .hold-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .hold-cat { font-weight: 700; font-size: 16px; }
-.hold-ccy { font-size: 12.5px; color: var(--muted); }
+.hold-blurb { font-size: 12.5px; color: var(--muted); margin: -4px 0 12px; }
+.hold-section { display: flex; flex-direction: column; gap: 20px; }
+.hold-section .section-label { margin-bottom: 0; }
+.hold-section-note { font-size: 12px; color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 500; }
 .hold-total { margin-left: auto; font-size: 13.5px; }
 .hold-table { display: flex; flex-direction: column; }
 .hold-row {
@@ -890,13 +941,14 @@ body[data-mode="budget"] .brand-sun { background: #FFF3D6; }
 .rev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; margin-top: 4px; }
 .rev-card { display: flex; flex-direction: column; gap: 12px; }
 
-.rev-head { display: flex; align-items: center; gap: 8px; }
+/* wraps so the country sticker never squeezes the name out of the card */
+.rev-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rev-ticker {
   width: 78px; flex-shrink: 0; font-weight: 700; font-size: 14px; color: var(--accent-deep);
   background: var(--accent-faint); border: 1px solid transparent; border-radius: 8px; padding: 5px 8px;
 }
 .rev-name {
-  flex: 1; min-width: 0; font-family: var(--font-head); font-size: 14px; color: var(--ink);
+  flex: 1; min-width: 120px; font-family: var(--font-head); font-size: 14px; color: var(--ink);
   background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 5px 6px;
 }
 .rev-ticker:hover, .rev-name:hover { border-color: var(--line); }

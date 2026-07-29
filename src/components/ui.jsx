@@ -1,5 +1,6 @@
 // Shared UI primitives for the SunnyHeron "Sea Glass" design
 // (see design_handoff_sunnyheron_rebrand/README.md)
+import { REGIONS, regionById } from '../data/portfolio';
 
 // Plain-English tooltip: dotted underline + hover bubble — THE core UX pattern
 export function Term({ tip, children }) {
@@ -34,7 +35,6 @@ export function CatDot({ color, size = 9 }) {
 
 const TAG_INFO = {
   finclass: { label: 'FC', tip: 'A FinClass pick — recommended in the course we follow', cls: 'tag-fc' },
-  energy:   { label: 'EN', tip: 'Part of our energy thesis — companies powering the world', cls: 'tag-en' },
 };
 
 export function TagBadge({ tag, on = true, onClick }) {
@@ -53,6 +53,29 @@ export function TagBadge({ tag, on = true, onClick }) {
       {t.label}
       <span className="term-tip">{t.tip}</span>
     </span>
+  );
+}
+
+// Country sticker: says where a holding lives, which is also what decides its
+// currency and which price feed quotes it.
+export function RegionBadge({ region, size = 'md' }) {
+  const r = regionById(region);
+  return (
+    <span className={`region-badge region-${r.id}` + (size === 'sm' ? ' region-sm' : '')} tabIndex={0}>
+      {r.code}
+      <span className="term-tip">{r.name} — {r.tip}</span>
+    </span>
+  );
+}
+
+// Same sticker, as a picker. Styled to read as a badge until you click it.
+export function RegionSelect({ value, onChange }) {
+  const r = regionById(value);
+  return (
+    <select className={`region-select region-${r.id}`} value={r.id} onChange={e => onChange(e.target.value)}
+      title="Where this one lives — sets its currency and which price feed quotes it">
+      {REGIONS.map(o => <option key={o.id} value={o.id}>{o.code}</option>)}
+    </select>
   );
 }
 

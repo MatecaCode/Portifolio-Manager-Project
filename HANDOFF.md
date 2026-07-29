@@ -80,8 +80,9 @@ src/
   index.css                # Global CSS vars, fonts, body styles
 
   data/
-    portfolio.js           # CATEGORIES, SEED_HOLDINGS, DEFAULT_TARGETS, CASH_ACCOUNTS
-                           # Edit here to add/remove holdings or categories
+    portfolio.js           # CATEGORIES (the buckets), REGIONS (the country stickers),
+                           # SEED_HOLDINGS, DEFAULT_TARGETS, SEED_REVIEWS, CASH_ACCOUNTS
+                           # Edit here to add/remove holdings, buckets or stickers
 
   hooks/
     usePortfolio.js        # THE main hook — all state, Supabase sync, price refresh, CRUD
@@ -89,6 +90,7 @@ src/
   lib/
     supabase.js            # Supabase client (returns null if env vars missing — safe)
     prices.js              # fetchAllPrices() — calls CoinGecko + Brapi + Finnhub in parallel
+    migrate.js             # Brings saved state onto the bucket + sticker model (idempotent)
 
   components/
     Header.jsx / .css      # Sticky header: logo, price status badge, sync status badge
@@ -106,7 +108,7 @@ Single-row table — one shared record for the couple:
 ```sql
 id          text primary key  -- always 'shared'
 holdings    jsonb             -- array of holding objects (see shape below)
-targets     jsonb             -- { br_stocks: 11, fii: 11, renda_fixa: 25, us_stocks: 20, intl: 23, crypto: 10 }
+targets     jsonb             -- { stocks: 11, fii: 11, renda_fixa: 25, intl: 23, crypto: 10, energy: 12, water: 5, rare_earths: 3 }
 fx_rate     numeric           -- USD/BRL rate, e.g. 5.70
 updated_at  timestamptz
 ```
@@ -115,28 +117,54 @@ updated_at  timestamptz
 ```js
 {
   id:        string,   // 'h_abc123' — random uid
-  category:  string,   // 'br_stocks' | 'fii' | 'renda_fixa' | 'us_stocks' | 'intl' | 'crypto'
+  category:  string,   // the bet: 'crypto' | 'stocks' | 'fii' | 'renda_fixa' | 'intl' | 'energy' | 'water' | 'rare_earths'
+  region:    string,   // the sticker: 'us' | 'br' | 'china' | 'japan' | 'europe' | 'global'
   ticker:    string,   // 'BTC', 'PRIO3', 'CEG', etc.
   name:      string,   // Display name
   shares:    number,   // Quantity held (or BRL invested for renda_fixa)
-  cost:      number,   // Average cost per unit in local currency
-  price:     number,   // Current price per unit in local currency (auto-updated by price service)
+  cost:      number,   // Average cost per unit in its region's currency
+  price:     number,   // Current price per unit in its region's currency (auto-updated by price service)
   finclass:  boolean,  // Tagged as FinClass recommendation
-  energy:    boolean,  // Tagged as Energy thesis pick
 }
 ```
 
-### Categories and currencies
-| id | name | currency | Price source |
-|---|---|---|---|
-| `br_stocks` | BR Stocks | BRL | Brapi |
-| `fii` | FIIs | BRL | Brapi |
-| `renda_fixa` | Renda Fixa | BRL | Manual (price=1, qty=BRL invested) |
-| `us_stocks` | US Stocks | USD | Finnhub |
-| `intl` | International | BRL | Brapi for WRLD11/USDB11 (B3-listed ETFs); ACE-CAP/GENOA manual (price=1, qty=BRL invested) |
-| `crypto` | Crypto | USD | CoinGecko |
+### Two independent axes
+The **bucket** says what kind of bet it is; the **sticker** says where it lives.
+They're independent, so Stocks can hold a B3 name and a NYSE name at once.
 
-All values are converted to USD for the overview total using the stored `fx_rate`.
+| Bucket | What belongs there |
+|---|---|
+| `crypto` | Coins and tokens |
+| `stocks` | Individual companies, any country |
+| `fii` | Brazilian real-estate funds |
+| `renda_fixa` | BR bonds/CDs — manual, price=1, qty=BRL invested |
+| `intl` | Broad world funds and multimercado managers |
+| `energy` | Thematic sleeve — AI power: generation, grid gear, on-site power |
+| `water` | Thematic sleeve — AI water: treatment, pumps, cooling |
+| `rare_earths` | Thematic sleeve — magnets, mining, strategic metals |
+
+The sticker carries the currency **and** the price source — that's the whole
+reason it exists as data rather than as a label:
+
+| Sticker | code | currency | Price source |
+|---|---|---|---|
+| `us` | USA | USD | Finnhub |
+| `br` | BR | BRL | Brapi |
+| `china` / `japan` / `europe` | CHINA / JPN / EUR | USD | Finnhub (assumes a US-listed ADR or ETF) |
+| `global` | GLOBAL | USD | Finnhub, or CoinGecko for the crypto bucket |
+
+Adding a region with a currency other than USD/BRL means adding an FX rate —
+the app carries a single USD/BRL rate today. All values are converted to USD
+for the overview total using the stored `fx_rate`.
+
+### Migrating saved state (`src/lib/migrate.js`)
+Runs on every load, against both the Supabase row and the localStorage copy,
+and is idempotent. `br_stocks`/`us_stocks` → `stocks` + the matching sticker;
+EN-tagged holdings → `energy`; review candidates themed Water/Rare earths →
+their sleeve. Targets: the old `us_stocks` weight is split 12:5:3 across
+energy/water/rare_earths so the total is preserved exactly. Only *legacy*
+records get promoted — once something sits in a new bucket, that's a deliberate
+choice and a stale theme string won't drag it back.
 
 ---
 
@@ -148,11 +176,15 @@ All values are converted to USD for the overview total using the stored `fx_rate
 |---|---|---|---|
 | CoinGecko | BTC, ETH, XRP, BNB, AVAX, SOL | None (free) | ~30 req/min |
 | Brapi | All BR tickers (PRIO3, XPML11, etc.) | `VITE_BRAPI_KEY` | Free tier |
-| Finnhub | US stocks (CEG, VRT, BE) | `VITE_FINNHUB_KEY` | 60 req/min free |
+| Finnhub | Everything with a USD sticker (CEG, VRT, BE…) | `VITE_FINNHUB_KEY` | 60 req/min free |
+
+Routing is by sticker, not by bucket: `region.quotes` picks the API, the crypto
+bucket always goes to CoinGecko, and `renda_fixa` plus GENOA are skipped
+entirely (manual, price=1).
 
 **To add a new crypto:** Add its CoinGecko ID to `GECKO_IDS` in `prices.js`.  
-**To add a new US stock:** Just add it to the `us_stocks` category — Finnhub handles any US ticker.  
-**To add a new BR stock/FII:** Just add it to `br_stocks` or `fii` — Brapi handles any B3 ticker.
+**To add a new US stock:** Add it to any bucket with the USA sticker — Finnhub handles any US ticker.  
+**To add a new BR stock/FII:** Add it with the BR sticker — Brapi handles any B3 ticker.
 
 Auto-refreshes every 5 minutes (gentle on free-tier API limits). Manual refresh via the header button.
 
@@ -197,10 +229,18 @@ This means:
 **Add a new holding to the seed data:**
 → `src/data/portfolio.js` → `SEED_HOLDINGS` array
 
-**Add a new category (e.g. "Real Estate US"):**
-→ `src/data/portfolio.js` → `CATEGORIES` array  
-→ `src/data/portfolio.js` → `DEFAULT_TARGETS` object  
-→ `src/lib/prices.js` → add category ID to the relevant `_CATS` array
+**Add a new bucket (e.g. "Defense"):**
+→ `src/data/portfolio.js` → `CATEGORIES` array (set `kind: 'core' | 'theme'` and a `blurb`)  
+→ `src/data/portfolio.js` → `DEFAULT_TARGETS` + `DEFAULT_CATEGORY_REGION`  
+→ `src/index.css` → a `--cat-*` color var  
+→ `src/components/Holdings.jsx` → add the id to the matching `SECTIONS` order  
+Nothing to touch in `prices.js` — quotes follow the sticker, not the bucket.
+
+**Add a new country sticker (e.g. India):**
+→ `src/data/portfolio.js` → `REGIONS` array (`currency` + `quotes` + `tip`)  
+→ `src/index.css` → a `--reg-*` var and a `.region-<id>` badge color pair  
+A currency other than USD/BRL also needs an FX rate — `toUSD()` in
+`usePortfolio.js` only knows the stored USD/BRL one.
 
 **Add a new crypto with live price:**
 → `src/lib/prices.js` → `GECKO_IDS` object (find the ID at coingecko.com/coins/list)

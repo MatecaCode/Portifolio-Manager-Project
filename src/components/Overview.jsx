@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CATEGORIES } from '../data/portfolio';
+import { CATEGORIES, REGIONS } from '../data/portfolio';
 import { Card, CatDot, Chip, Donut, ProgressBar, SectionLabel, Term } from './ui';
 import { fmt, fmt0 } from '../lib/format';
 
@@ -23,8 +23,9 @@ function greeting() {
   return 'Good evening, you two 🌙';
 }
 
-export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, onCategoryClick, accounts, derivedAccounts = [], addAccount, updateAccount, removeAccount, onManageBudget }) {
+export default function Overview({ holdings, categoryTotals, regionTotals, fxRate, setFxRate, onCategoryClick, accounts, derivedAccounts = [], addAccount, updateAccount, removeAccount, onManageBudget }) {
   const totals = categoryTotals();
+  const byRegion = regionTotals();
   const totalVal = Object.values(totals).reduce((a, t) => a + t.value, 0);
   const totalCost = Object.values(totals).reduce((a, t) => a + t.cost, 0);
   const pnl = totalVal - totalCost;
@@ -63,6 +64,13 @@ export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, 
 
   const sortedCategories = [...CATEGORIES].sort((a, b) => totals[b.id].value - totals[a.id].value);
   const diversified = slices.length > 1;
+
+  // Country lives on each holding now, so the geographic mix is its own view
+  // rather than something you read off the bucket names.
+  const regionSlices = REGIONS
+    .map(r => ({ ...r, value: byRegion[r.id].value }))
+    .filter(r => r.value > 0)
+    .sort((a, b) => b.value - a.value);
 
   return (
     <div className="screen">
@@ -151,6 +159,27 @@ export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, 
               </p>
             </div>
           </div>
+
+          {regionSlices.length > 0 && (
+            <div className="region-split">
+              <div className="region-split-label">
+                <Term tip="Where your money actually sits in the world. Each holding carries a country sticker — this adds them up.">By country</Term>
+              </div>
+              <div className="region-bar">
+                {regionSlices.map(r => (
+                  <div key={r.id} className="region-bar-seg" style={{ width: `${r.value / totalVal * 100}%`, background: r.color }}
+                    title={`${r.name}: ${fmt(r.value)} (${(r.value / totalVal * 100).toFixed(1)}%)`} />
+                ))}
+              </div>
+              <div className="region-split-legend">
+                {regionSlices.map(r => (
+                  <span className="legend-item" key={r.id}>
+                    <CatDot color={r.color} /> {r.code} {(r.value / totalVal * 100).toFixed(0)}%
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </Card>
 
         <Card>
@@ -164,9 +193,7 @@ export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, 
                   title={`Click to see the ${c.name} investments`}>
                   <CatDot color={c.color} />
                   <div className="cat-name">
-                    {c.id === 'fii' ? <span><Term tip="Fundos Imobiliários — Brazilian real-estate funds that pay monthly rent-like income.">{c.name}</Term></span>
-                      : c.id === 'renda_fixa' ? <span><Term tip="Brazil's version of bonds and CDs — steady, predictable interest.">{c.name}</Term></span>
-                      : c.name}
+                    <span><Term tip={c.blurb}>{c.name}</Term></span>
                     <span className="cat-sub">{t.owned} owned · {t.count} on the list</span>
                   </div>
                   <div className="cat-vals">

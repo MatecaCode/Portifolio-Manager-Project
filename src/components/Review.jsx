@@ -1,7 +1,8 @@
-import { CATEGORIES } from '../data/portfolio';
-import { Card, CatDot, Chip, SectionLabel, Term } from './ui';
+import { CATEGORIES, categoryById } from '../data/portfolio';
+import { Card, CatDot, Chip, RegionSelect, SectionLabel, Term } from './ui';
 
-const catColor = id => CATEGORIES.find(c => c.id === id)?.color;
+const CORE = CATEGORIES.filter(c => c.kind === 'core');
+const THEMES = CATEGORIES.filter(c => c.kind === 'theme');
 
 // Candidate investments Matheus & Melanie review together before any money
 // moves. Approve → drops into Holdings as a 0-share watchlist entry; reject →
@@ -34,9 +35,10 @@ export default function Review({ reviews, addReview, updateReview, rejectReview,
             {groups[theme].map(r => (
               <Card className="rev-card" key={r.id}>
                 <div className="rev-head">
-                  <CatDot color={catColor(r.category)} size={11} />
+                  <CatDot color={categoryById(r.category)?.color} size={11} />
                   <input className="rev-ticker mono" value={r.ticker} placeholder="TICK"
                     onChange={e => updateReview(r.id, 'ticker', e.target.value)} />
+                  <RegionSelect value={r.region} onChange={v => updateReview(r.id, 'region', v)} />
                   <input className="rev-name" value={r.name} placeholder="Company / fund name"
                     onChange={e => updateReview(r.id, 'name', e.target.value)} />
                   {r.source && <Chip tone="soft" title="Where this idea came from">{r.source}</Chip>}
@@ -48,11 +50,16 @@ export default function Review({ reviews, addReview, updateReview, rejectReview,
                 <div className="rev-alloc">
                   <label className="rev-field">
                     <span className="rev-flabel">
-                      <Term tip="Which of your six portfolio groups this joins if approved. Dedicated new groups are a planned follow-up.">Goes in</Term>
+                      <Term tip="Which bucket this joins if approved. Buckets are about the kind of bet — the country is the sticker next to the ticker.">Goes in</Term>
                     </span>
                     <select className="rev-select" value={r.category}
                       onChange={e => updateReview(r.id, 'category', e.target.value)}>
-                      {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      <optgroup label="Core buckets">
+                        {CORE.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </optgroup>
+                      <optgroup label="Thematic sleeves">
+                        {THEMES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </optgroup>
                     </select>
                   </label>
                   <label className="rev-field">

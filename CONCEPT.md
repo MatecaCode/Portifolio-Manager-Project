@@ -36,10 +36,13 @@ reference prices, ready for when he buys.
    time and he'll follow along. Their picks are tagged **FC** in the app.
 2. **Brazil conviction**: He believes Brazil is well-positioned; wants a
    well-balanced Brazilian portfolio (stocks + FIIs + renda fixa).
-3. **US energy thesis**: His own picks (NOT FinClass): CEG (Constellation),
-   VRT (Vertiv), BE (Bloom Energy). Tagged **EN**. Source: a US stock
-   recommendation video (whiteboard targets: CEG +40% by 3/26, VRT +200% by
-   6/25, BE +44% by 2/26).
+3. **AI-infrastructure theses**: His own picks (NOT FinClass), each its own
+   bucket so they carry separate targets:
+   - **Energy** — CEG (Constellation), VRT (Vertiv), BE (Bloom Energy). Source:
+     a US stock recommendation video (whiteboard targets: CEG +40% by 3/26,
+     VRT +200% by 6/25, BE +44% by 2/26).
+   - **Water** — XYL, ECL, PHO (in review).
+   - **Rare earths** — MP, REMX (in review).
 4. **Crypto**: Existing real positions (BTC, ETH, XRP, BNB, AVAX) on an
    exchange, currently ~-$960 unrealized.
 5. **Planned**: S&P 500 exposure, possibly other international markets.
@@ -48,10 +51,12 @@ reference prices, ready for when he buys.
 
 | Decision | Rationale |
 |---|---|
-| 6 category buckets: BR Stocks, FIIs, Renda Fixa, US Stocks, International, Crypto | Matches how Matheus mentally organizes money |
+| Buckets describe the **bet**, not the country: Crypto, Stocks, FIIs, Renda Fixa, International + the thematic sleeves Energy, Water, Rare Earths | His call, June 2026: "US Stocks" was too broad — it silently held the whole energy thesis, and water names had nowhere to go. Each thesis now carries its own target so none can quietly take over. |
+| Country = **sticker on the holding** (USA / BR / CHINA / JPN / EUR / GLOBAL), not a bucket | Same call. Where something trades is a property of the holding, not a kind of bet. The sticker also decides the holding's currency and which price API quotes it, so a bucket can hold a B3 name and a NYSE name side by side. |
+| Every region except BR settles in USD | The app carries one USD/BRL rate; a second currency would need a second rate. China/Japan/Europe assume the usual route for a US-based investor — a US-listed ADR or ETF, which really is dollar-priced. |
+| "By country" bar on the Overview | Splitting BR Stocks / US Stocks into thesis buckets would otherwise have hidden the geographic mix. The stickers add it back as its own view. |
 | FinClass = **tag (FC)**, not a bucket | His call: most BR holdings are FC picks; a bucket would duplicate everything. Tag travels across categories. |
-| Energy = **tag (EN)**, not a bucket | Same logic; only 3 stocks now, may grow across categories |
-| WRLD11/USDB11 → International category | They're B3-listed wrappers (VT/BND) but the *intent* is international exposure — categorized by intent, his explicit choice |
+| WRLD11/USDB11 → International bucket, BR sticker | They're B3-listed wrappers (VT/BND) but the *intent* is international exposure — the bucket says what the exposure is, the sticker says where it trades (and in which currency) |
 | Wealthfront = separate cash card, NOT in allocation % | It's emergency fund, not an investment bet. Counts toward Net Worth only. |
 | Renda fixa: price=1, shares=BRL invested | CDB/Tesouro don't have unit prices; track invested amount |
 | Dual currency BRL/USD with manual FX rate | BR holdings priced in BRL, unified USD total via editable rate (~5.70) |
@@ -60,11 +65,15 @@ reference prices, ready for when he buys.
 
 ## Allocation Targets (current defaults, sum=100)
 
-br_stocks 11 / fii 11 / renda_fixa 25 / us_stocks 20 / intl 23 / crypto 10
+stocks 11 / fii 11 / renda_fixa 25 / intl 23 / crypto 10 /
+energy 12 / water 5 / rare_earths 3
 
 Derived from FinClass's visible BRL allocation (~94% captured from screenshots,
 some rows may be below fold) scaled to leave room for US + crypto sleeves.
-Matheus may want US higher (conviction) — these are starting points.
+Matheus may want the thematic sleeves higher (conviction) — these are starting
+points. The old `us_stocks 20` is exactly the new energy 12 + water 5 +
+rare_earths 3; saved targets are split in that same proportion on load, so an
+existing portfolio's total is preserved to the decimal.
 
 ## Seeded Holdings (from real screenshots)
 
@@ -75,7 +84,7 @@ Matheus may want US higher (conviction) — these are starting points.
   Tesouro IPCA 2050 min IPCA+6.5% (7.5%), ETF FIXA11/IDKA11 (5%)
 - Alternativos: WRLD11/VT (11%), USDB11/BND (6%), ACE Capital (6%), Genoa Radar (6%)
 
-**Energy picks (tagged EN, Matheus's own):** CEG ~$280, VRT ~$110, BE ~$35
+**Energy sleeve (Matheus's own):** CEG ~$280, VRT ~$110, BE ~$35
 
 **Crypto (REAL positions from exchange, April 2026):**
 - BTC 0.04718 @ avg $86,845.51

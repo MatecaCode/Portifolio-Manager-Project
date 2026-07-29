@@ -1,3 +1,5 @@
+import { regionById } from '../data/portfolio'
+
 const FINNHUB_KEY = import.meta.env.VITE_FINNHUB_KEY
 const BRAPI_KEY   = import.meta.env.VITE_BRAPI_KEY
 
@@ -6,18 +8,24 @@ const GECKO_IDS = {
   BNB: 'binancecoin', AVAX: 'avalanche-2', SOL: 'solana',
 }
 
-// renda_fixa is intentionally excluded: price=1, shares=BRL invested.
-// intl is included for B3-listed ETFs (WRLD11/USDB11); ACE-CAP/GENOA are
-// CVM funds with no public quote API — they keep price=1, shares=BRL invested.
-const BR_CATS = ['br_stocks', 'fii', 'intl']
-const US_CATS = ['us_stocks']
+// Which API can quote a holding follows its country sticker (region.quotes),
+// not its bucket — a BR name and a US name can sit in the same bucket now.
+// renda_fixa is excluded wholesale: price=1, shares=BRL invested.
+// ACE-CAP/GENOA are CVM funds with no public quote API, same deal.
+const MANUAL_CATS = ['renda_fixa']
 const MANUAL_TICKERS = ['GENOA']
+
+const quotable = h => h.ticker && !h.ticker.includes('-')
+  && !MANUAL_CATS.includes(h.category)
+  && !MANUAL_TICKERS.includes(h.ticker.toUpperCase())
 
 export async function fetchAllPrices(holdings) {
   const prices = {}, errors = {}
-  const crypto = holdings.filter(h => h.category === 'crypto')
-  const br     = holdings.filter(h => BR_CATS.includes(h.category) && h.ticker && !h.ticker.includes('-') && !MANUAL_TICKERS.includes(h.ticker.toUpperCase()))
-  const us     = holdings.filter(h => US_CATS.includes(h.category) && h.ticker && !h.ticker.includes('-'))
+  const live   = holdings.filter(quotable)
+  const crypto = live.filter(h => h.category === 'crypto')
+  const market = live.filter(h => h.category !== 'crypto')
+  const br     = market.filter(h => regionById(h.region).quotes === 'br')
+  const us     = market.filter(h => regionById(h.region).quotes === 'us')
 
   await Promise.allSettled([
     fetchCrypto(crypto, prices, errors),
