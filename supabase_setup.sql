@@ -9,12 +9,20 @@ create table if not exists portfolio_state (
   updated_at  timestamptz default now()
 );
 
--- Allow anyone with the anon key to read/write (your app uses this)
+-- Signed-in access only. The anon key ships in the browser bundle and is
+-- public, so it must NOT be able to reach this table on its own — the app
+-- signs in first (see src/hooks/useAuth.js) and reads with that session.
+-- Never widen this to `using (true)` without a role: that hands the whole
+-- table to anyone who views source. See SECURITY.md.
 alter table portfolio_state enable row level security;
 
-create policy "allow all"
+create policy "household access"
   on portfolio_state for all
+  to authenticated
   using (true) with check (true);
+
+revoke all on portfolio_state from anon;
+grant select, insert, update, delete on portfolio_state to authenticated;
 
 -- Seed the single shared row
 insert into portfolio_state (id)
@@ -35,11 +43,17 @@ create table if not exists budget_state (
   updated_at   timestamptz default now()
 );
 
+-- Same rule as portfolio_state, and this one matters more: budget_state holds
+-- imported bank statements, transactions, balances and property/tax data.
 alter table budget_state enable row level security;
 
-create policy "allow all"
+create policy "household access"
   on budget_state for all
+  to authenticated
   using (true) with check (true);
+
+revoke all on budget_state from anon;
+grant select, insert, update, delete on budget_state to authenticated;
 
 insert into budget_state (id) values ('shared') on conflict do nothing;
 
