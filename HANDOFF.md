@@ -91,6 +91,7 @@ src/
     supabase.js            # Supabase client (returns null if env vars missing — safe)
     prices.js              # fetchAllPrices() — calls CoinGecko + Brapi + Finnhub in parallel
     migrate.js             # Brings saved state onto the bucket + sticker model (idempotent)
+    trades.js              # IBKR Trade Confirmation PDF → fills → positions + average cost
 
   components/
     Header.jsx / .css      # Sticky header: logo, price status badge, sync status badge
@@ -109,6 +110,8 @@ Single-row table — one shared record for the couple:
 id          text primary key  -- always 'shared'
 holdings    jsonb             -- array of holding objects (see shape below)
 targets     jsonb             -- { stocks: 11, fii: 11, renda_fixa: 25, intl: 23, crypto: 10, energy: 12, water: 5, rare_earths: 3 }
+reviews     jsonb             -- candidate investments awaiting a decision
+trades      jsonb             -- imported broker fills; shares + cost are DERIVED from this
 fx_rate     numeric           -- USD/BRL rate, e.g. 5.70
 updated_at  timestamptz
 ```
@@ -156,6 +159,32 @@ reason it exists as data rather than as a label:
 Adding a region with a currency other than USD/BRL means adding an FX rate —
 the app carries a single USD/BRL rate today. All values are converted to USD
 for the overview total using the stored `fx_rate`.
+
+### Broker imports (`src/lib/trades.js`, Import tab)
+IBKR **Trade Confirmation Report** PDFs (Performance & Reports → Statements →
+Trade Confirmations). Parsed in the browser; the file never leaves the page.
+
+Three things the parser has to get right, all of them load-bearing:
+
+| Trap | Handling |
+|---|---|
+| The report is landscape content on a portrait page (`page.rotate === 90`) | Rows run along `transform[4]`, cells along `transform[5]` — `extractRows()` picks the axes from the page rotation |
+| Every fractional fill prints **twice** (exchange `-` and `IBKR`, identical qty/price/comm) | Deduped on everything except the exchange column. Summing both would double every position |
+| A misread row would silently corrupt positions | `reconcile()` checks the parse against the report's own per-symbol subtotals and grand total. A parse that doesn't add up is **refused**, not applied |
+
+`trades` in `portfolio_state` is a **ledger, not a snapshot** — `shares` and
+`cost` are derived from it via `positionsFromTrades()`, so re-importing the same
+confirmation is a no-op (fills are keyed on symbol + timestamp + qty + price +
+proceeds) and each new day's file just extends the history.
+
+**Commission is folded into cost basis** (his call): a position's cost is
+`(Σ proceeds + Σ commission) / shares`. At his order sizes IBKR charges the 1%
+maximum, so a freshly imported position correctly shows ≈ −1% P/L.
+
+An import writes **only** `shares` and `cost`. Targets, buckets and stickers are
+never rewritten — a ticker already in the Review list brings its bucket, sticker
+and thesis along and is cleared from Review; anything unrecognised is placed by
+hand on the preview screen.
 
 ### Migrating saved state (`src/lib/migrate.js`)
 Runs on every load, against both the Supabase row and the localStorage copy,

@@ -24,6 +24,19 @@ insert into portfolio_state (id)
 -- Verify it worked:
 select * from portfolio_state;
 
+-- ── Review list + broker trade ledger (portfolio_state) ──
+-- reviews: candidate investments waiting on a decision
+--          [{ id, ticker, name, category, region, theme, groupPct, thesis, link, source }]
+-- trades:  imported broker fills, oldest first — quantity and average cost are
+--          DERIVED from this, so re-importing a confirmation is a no-op
+--          [{ id, ticker, side, quantity, price, proceeds, commission, datetime,
+--             exchange, region, name, source }]
+-- The app self-heals if these columns are missing (they stay in localStorage),
+-- so running this later is safe — it just turns cloud sync on for them.
+alter table portfolio_state
+  add column if not exists reviews jsonb not null default '[]',
+  add column if not exists trades  jsonb not null default '[]';
+
 -- ── Budget platform (applied 2026-06-12 as migration create_budget_state) ──
 -- Single shared JSON-blob row, same pattern as portfolio_state.
 create table if not exists budget_state (

@@ -574,6 +574,44 @@ main { display: block; }
 }
 .dropzone-title { font-weight: 700; font-size: 17px; margin-bottom: 4px; }
 .dropzone p { font-size: 13.5px; color: var(--muted); max-width: 480px; margin: 0 auto; }
+.import-live .dropzone { cursor: pointer; padding: 28px; transition: border-color 0.15s ease, background 0.15s ease; }
+.import-live .dropzone:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+.import-live { display: flex; flex-direction: column; gap: 16px; }
+.import-live-head { display: flex; align-items: flex-start; gap: 12px; }
+.import-live-head .import-icon { margin: 0; }
+.import-live-head .import-note { max-width: 660px; line-height: 1.55; }
+.import-live-head .chip { margin-left: auto; flex-shrink: 0; }
+
+.import-error, .import-ok {
+  border-radius: calc(var(--radius) * 0.7);
+  padding: 13px 16px; font-size: 13.5px; line-height: 1.55;
+}
+.import-error { background: #FDEDE7; border: 1px solid #F6CFC1; color: #8C4527; }
+.import-error ul { margin: 6px 0 0 18px; }
+.import-error li { font-family: var(--font-mono); font-size: 12px; }
+.import-ok { background: var(--accent-faint); border: 1px solid var(--accent-soft); color: var(--accent-deep); }
+
+.imp-table { display: flex; flex-direction: column; }
+.imp-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1.5fr 110px 110px 120px 130px;
+  align-items: center; gap: 10px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.imp-row:last-child { border-bottom: none; }
+.imp-head {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted);
+}
+.imp-row .num { text-align: right; }
+.imp-tick { display: flex; align-items: center; gap: 8px; }
+.imp-goes { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 13px; }
+.imp-actions { display: flex; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+.imp-summary { font-size: 12.5px; color: var(--muted); flex: 1; min-width: 200px; }
+.imp-actions .btn-soft[disabled] { opacity: 0.45; cursor: not-allowed; }
 
 /* ---------- budget mode (warm "Honey" sibling theme) ---------- */
 /* Same Sea Glass bones, but toggling to Budget swaps the palette to a warm

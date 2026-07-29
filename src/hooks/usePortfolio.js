@@ -4,8 +4,13 @@ import { fetchAllPrices } from '../lib/prices'
 import { SEED_HOLDINGS, DEFAULT_TARGETS, CATEGORIES, CASH_ACCOUNTS, SEED_REVIEWS,
          DEFAULT_CATEGORY_REGION, DEFAULT_REGION, REGIONS, holdingCurrency, holdingRegion } from '../data/portfolio'
 import { migrateHoldings, migrateReviews, migrateTargets } from '../lib/migrate'
+import { mergeTrades, positionsFromTrades } from '../lib/trades'
 
 const LS_KEY = 'portfolio_v4'
+
+// Columns added after the table was first created. A deployment whose Supabase
+// schema predates them still syncs everything else.
+const OPTIONAL_COLUMNS = ['reviews', 'trades']
 
 function lsLoad() {
   try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : null } catch { return null }
@@ -25,8 +30,17 @@ export function usePortfolio() {
   const [lastUpdated, setLastUpdated] = useState(null)
   const [syncStatus, setSyncStatus]   = useState('local') // local | synced | syncing | error
   const [ready, setReady]             = useState(false)
+  // Imported broker fills, oldest first. This is a ledger, not a snapshot:
+  // positions and average costs are derived from it, so re-importing the same
+  // confirmation is harmless and a new one just extends the history.
+  const [trades, setTrades]           = useState([])
   const saveTimer = useRef(null)
   const priceTimer = useRef(null)
+  // Every persist call has to carry the ledger, and threading it through a
+  // dozen call sites is a bug waiting to happen — the writer reads the latest
+  // value from here instead.
+  const tradesRef = useRef([])
+  const setLedger = useCallback(next => { tradesRef.current = next; setTrades(next) }, [])
 
   // ── Load: Supabase first, fallback localStorage ──
   useEffect(() => {
@@ -51,6 +65,7 @@ export function usePortfolio() {
             // and there's no local copy either.
             if (Array.isArray(data.reviews)) setReviews(migrateReviews(data.reviews))
             else setReviews(migrateReviews(lsLoad()?.reviews ?? SEED_REVIEWS))
+            setLedger(Array.isArray(data.trades) ? data.trades : (lsLoad()?.trades ?? []))
             setSyncStatus('synced')
             setReady(true)
             return
@@ -64,27 +79,31 @@ export function usePortfolio() {
       setTargets(saved?.targets ? migrateTargets(saved.targets) : DEFAULT_TARGETS)
       setFxRate(saved?.fxRate || 5.70)
       setReviews(migrateReviews(saved?.reviews ?? SEED_REVIEWS))
+      setLedger(saved?.trades ?? [])
       setSyncStatus('local')
       setReady(true)
     }
     init()
-  }, [])
+  }, [setLedger])
 
   // ── Save debounced ──
   const persistState = useCallback((h, t, fx, acc, rev) => {
-    lsSave({ holdings: h, targets: t, fxRate: fx, accounts: acc, reviews: rev })
+    const trd = tradesRef.current
+    lsSave({ holdings: h, targets: t, fxRate: fx, accounts: acc, reviews: rev, trades: trd })
     if (!supabase) return
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
       setSyncStatus('syncing')
       try {
-        const row = { id: 'shared', holdings: h, targets: t, fx_rate: fx, accounts: acc, reviews: rev, updated_at: new Date().toISOString() }
+        const row = { id: 'shared', holdings: h, targets: t, fx_rate: fx, accounts: acc, reviews: rev, trades: trd, updated_at: new Date().toISOString() }
         let { error } = await supabase.from('portfolio_state').upsert(row)
-        // Self-heal: if the `reviews` column hasn't been added yet, save
-        // everything else (reviews stay in localStorage) instead of failing
-        // the whole write. Cloud sync of reviews begins once the column exists.
-        if (error && /review/i.test(error.message || '')) {
-          const { reviews, ...rest } = row
+        // Self-heal: a column that hasn't been added to the table yet shouldn't
+        // fail the whole write. Drop just the missing ones and save the rest
+        // (they stay in localStorage); cloud sync starts once the column exists.
+        const missing = error ? OPTIONAL_COLUMNS.filter(c => new RegExp(c, 'i').test(error.message || '')) : []
+        if (missing.length) {
+          const rest = { ...row }
+          missing.forEach(c => delete rest[c])
           ;({ error } = await supabase.from('portfolio_state').upsert(rest))
         }
         setSyncStatus(error ? 'error' : 'synced')
@@ -276,8 +295,59 @@ export function usePortfolio() {
     persistState(nextHoldings, targets, fxRate, accounts, nextReviews)
   }, [holdings, reviews, targets, fxRate, accounts, persistState])
 
+  // ── Broker imports ──────────────────────────────────────────────────
+  // Fold parsed fills into the ledger, then rewrite the affected positions
+  // from it. Deliberately narrow: only `shares` and `cost` are ever written.
+  // Targets, buckets and stickers of existing holdings are never touched by an
+  // import — the allocation plan is yours, the broker only reports what you own.
+  const importTrades = useCallback((incoming, placements = {}) => {
+    const { trades: nextTrades, added } = mergeTrades(tradesRef.current, incoming)
+    const positions = positionsFromTrades(nextTrades)
+    const touched = new Set(incoming.map(t => (t.ticker || '').toUpperCase()))
+
+    const nextHoldings = [...holdings]
+    const created = []
+    for (const pos of positions) {
+      if (!touched.has(pos.ticker)) continue
+      const idx = nextHoldings.findIndex(h => (h.ticker || '').toUpperCase() === pos.ticker)
+      if (idx >= 0) {
+        nextHoldings[idx] = { ...nextHoldings[idx], shares: pos.shares, cost: pos.cost }
+        continue
+      }
+      // Not held yet. A candidate already sitting in the review list brings its
+      // bucket, sticker and thesis along; anything else lands where the import
+      // screen was told to put it.
+      const candidate = reviews.find(r => (r.ticker || '').toUpperCase() === pos.ticker)
+      const place = placements[pos.ticker] || {}
+      const category = place.category || candidate?.category || 'stocks'
+      nextHoldings.push({
+        id: uid(), category,
+        region: place.region || candidate?.region || pos.region || DEFAULT_CATEGORY_REGION[category] || DEFAULT_REGION,
+        ticker: pos.ticker,
+        name: candidate?.name || pos.name || pos.ticker,
+        shares: pos.shares, cost: pos.cost,
+        price: pos.lastPrice || 0, // a placeholder until the next price refresh
+        finclass: false,
+        targetPct: candidate?.groupPct || 0,
+        thesis: candidate?.thesis || '', link: candidate?.link || null, theme: candidate?.theme || '',
+      })
+      created.push(pos.ticker)
+    }
+
+    // Something you've actually bought isn't a candidate any more.
+    const owned = new Set(positions.filter(p => p.shares > 0).map(p => p.ticker))
+    const nextReviews = reviews.filter(r => !owned.has((r.ticker || '').toUpperCase()))
+
+    setLedger(nextTrades)
+    setHoldings(nextHoldings)
+    setReviews(nextReviews)
+    persistState(nextHoldings, targets, fxRate, accounts, nextReviews)
+    return { added: added.length, created, cleared: reviews.length - nextReviews.length }
+  }, [holdings, reviews, targets, fxRate, accounts, persistState, setLedger])
+
   return {
     holdings, targets, fxRate, updateFxRate,
+    trades, importTrades,
     accounts, addAccount, updateAccount, removeAccount,
     reviews, addReview, updateReview, rejectReview, approveReview,
     priceStatus, priceErrors, lastUpdated, syncStatus,

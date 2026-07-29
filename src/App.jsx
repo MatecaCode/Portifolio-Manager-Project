@@ -102,7 +102,7 @@ export default function App() {
             {tab === 'holdings'  && <Holdings  holdings={p.holdings} addHolding={p.addHolding} updateHolding={p.updateHolding} removeHolding={p.removeHolding} toggleTag={p.toggleTag} holdingValue={p.holdingValue} holdingCost={p.holdingCost} priceErrors={p.priceErrors} focusCategory={focusCat} onFocusHandled={() => setFocusCat(null)} />}
             {tab === 'rebalance' && <Rebalance holdings={p.holdings} targets={p.targets} categoryTotals={p.categoryTotals} updateTarget={p.updateTarget} holdingValue={p.holdingValue} />}
             {tab === 'review'    && <Review reviews={p.reviews} addReview={p.addReview} updateReview={p.updateReview} rejectReview={p.rejectReview} approveReview={p.approveReview} />}
-            {tab === 'import'    && <Import />}
+            {tab === 'import'    && <Import holdings={p.holdings} reviews={p.reviews} trades={p.trades} importTrades={p.importTrades} />}
           </main>
         </>
       )}
