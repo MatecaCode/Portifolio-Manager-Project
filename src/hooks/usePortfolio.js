@@ -4,13 +4,12 @@ import { fetchAllPrices } from '../lib/prices'
 import { SEED_HOLDINGS, DEFAULT_TARGETS, CATEGORIES, CASH_ACCOUNTS, SEED_REVIEWS,
          DEFAULT_CATEGORY_REGION, DEFAULT_REGION, REGIONS, holdingCurrency, holdingRegion } from '../data/portfolio'
 import { migrateHoldings, migrateReviews, migrateTargets } from '../lib/migrate'
-import { mergeTrades, positionsFromTrades } from '../lib/trades'
 
 const LS_KEY = 'portfolio_v4'
 
 // Columns added after the table was first created. A deployment whose Supabase
 // schema predates them still syncs everything else.
-const OPTIONAL_COLUMNS = ['reviews', 'trades']
+const OPTIONAL_COLUMNS = ['reviews', 'imported_lots']
 
 function lsLoad() {
   try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : null } catch { return null }
@@ -23,24 +22,21 @@ export function usePortfolio() {
   const [holdings, setHoldings]       = useState([])
   const [accounts, setAccounts]       = useState(CASH_ACCOUNTS)
   const [reviews, setReviews]         = useState(SEED_REVIEWS)
+  // Ledger of broker trades already applied, so re-importing a statement can't
+  // silently double a position. See planIbkrImport() for the matching rules.
+  const [importedLots, setImportedLots] = useState([])
   const [targets, setTargets]         = useState(DEFAULT_TARGETS)
   const [fxRate, setFxRate]           = useState(5.70)
   const [priceStatus, setPriceStatus] = useState('idle')
-  const [priceErrors, setPriceErrors] = useState({})
+  const [priceErrors, setPriceErrors] = useState([])
+  // ticker -> { source, at } for quotes that actually arrived this session
+  const [priceMeta, setPriceMeta]     = useState({})
+  const [priceCoverage, setPriceCoverage] = useState({ live: 0, total: 0 })
   const [lastUpdated, setLastUpdated] = useState(null)
   const [syncStatus, setSyncStatus]   = useState('local') // local | synced | syncing | error
   const [ready, setReady]             = useState(false)
-  // Imported broker fills, oldest first. This is a ledger, not a snapshot:
-  // positions and average costs are derived from it, so re-importing the same
-  // confirmation is harmless and a new one just extends the history.
-  const [trades, setTrades]           = useState([])
   const saveTimer = useRef(null)
   const priceTimer = useRef(null)
-  // Every persist call has to carry the ledger, and threading it through a
-  // dozen call sites is a bug waiting to happen — the writer reads the latest
-  // value from here instead.
-  const tradesRef = useRef([])
-  const setLedger = useCallback(next => { tradesRef.current = next; setTrades(next) }, [])
 
   // ── Load: Supabase first, fallback localStorage ──
   useEffect(() => {
@@ -65,7 +61,7 @@ export function usePortfolio() {
             // and there's no local copy either.
             if (Array.isArray(data.reviews)) setReviews(migrateReviews(data.reviews))
             else setReviews(migrateReviews(lsLoad()?.reviews ?? SEED_REVIEWS))
-            setLedger(Array.isArray(data.trades) ? data.trades : (lsLoad()?.trades ?? []))
+            setImportedLots(Array.isArray(data.imported_lots) ? data.imported_lots : (lsLoad()?.importedLots ?? []))
             setSyncStatus('synced')
             setReady(true)
             return
@@ -79,23 +75,22 @@ export function usePortfolio() {
       setTargets(saved?.targets ? migrateTargets(saved.targets) : DEFAULT_TARGETS)
       setFxRate(saved?.fxRate || 5.70)
       setReviews(migrateReviews(saved?.reviews ?? SEED_REVIEWS))
-      setLedger(saved?.trades ?? [])
+      setImportedLots(saved?.importedLots ?? [])
       setSyncStatus('local')
       setReady(true)
     }
     init()
-  }, [setLedger])
+  }, [])
 
   // ── Save debounced ──
-  const persistState = useCallback((h, t, fx, acc, rev) => {
-    const trd = tradesRef.current
-    lsSave({ holdings: h, targets: t, fxRate: fx, accounts: acc, reviews: rev, trades: trd })
+  const persistState = useCallback((h, t, fx, acc, rev, lots = importedLots) => {
+    lsSave({ holdings: h, targets: t, fxRate: fx, accounts: acc, reviews: rev, importedLots: lots })
     if (!supabase) return
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
       setSyncStatus('syncing')
       try {
-        const row = { id: 'shared', holdings: h, targets: t, fx_rate: fx, accounts: acc, reviews: rev, trades: trd, updated_at: new Date().toISOString() }
+        const row = { id: 'shared', holdings: h, targets: t, fx_rate: fx, accounts: acc, reviews: rev, imported_lots: lots, updated_at: new Date().toISOString() }
         let { error } = await supabase.from('portfolio_state').upsert(row)
         // Self-heal: a column that hasn't been added to the table yet shouldn't
         // fail the whole write. Drop just the missing ones and save the rest
@@ -109,14 +104,22 @@ export function usePortfolio() {
         setSyncStatus(error ? 'error' : 'synced')
       } catch { setSyncStatus('error') }
     }, 800)
-  }, [])
+  }, [importedLots])
 
   // ── Price refresh ──
   const refreshPrices = useCallback(async (currentHoldings) => {
     if (!currentHoldings?.length) return
     setPriceStatus('loading')
-    const { prices, errors } = await fetchAllPrices(currentHoldings)
+    const { prices, errors, requested, missing } = await fetchAllPrices(currentHoldings)
     setPriceErrors(errors)
+
+    // Which tickers actually came back live, and from where. The Holdings LIVE
+    // badge reads this instead of assuming "crypto = live", which was wrong for
+    // every US stock even when Finnhub was working perfectly.
+    const meta = {}
+    Object.entries(prices).forEach(([t, p]) => { meta[t] = { source: p.source, at: Date.now() } })
+    setPriceMeta(prev => ({ ...prev, ...meta }))
+
     if (Object.keys(prices).length === 0) { setPriceStatus('error'); return }
 
     setHoldings(prev => {
@@ -127,8 +130,11 @@ export function usePortfolio() {
       persistState(updated, targets, fxRate, accounts, reviews)
       return updated
     })
-    setPriceStatus('live')
+    // Partial is its own state: crypto needs no key, so a dead Finnhub key used
+    // to still report "Prices live" while every stock quietly went stale.
+    setPriceStatus(missing?.length ? 'partial' : 'live')
     setLastUpdated(new Date())
+    setPriceCoverage({ live: requested.length - (missing?.length || 0), total: requested.length })
   }, [targets, fxRate, accounts, reviews, persistState])
 
   // Auto refresh every 60s
@@ -328,62 +334,74 @@ export function usePortfolio() {
     persistState(nextHoldings, targets, fxRate, accounts, nextReviews)
   }, [holdings, reviews, targets, fxRate, accounts, persistState])
 
-  // ── Broker imports ──────────────────────────────────────────────────
-  // Fold parsed fills into the ledger, then rewrite the affected positions
-  // from it. Deliberately narrow: only `shares` and `cost` are ever written.
-  // Targets, buckets and stickers of existing holdings are never touched by an
-  // import — the allocation plan is yours, the broker only reports what you own.
-  const importTrades = useCallback((incoming, placements = {}) => {
-    const { trades: nextTrades, added } = mergeTrades(tradesRef.current, incoming)
-    const positions = positionsFromTrades(nextTrades)
-    const touched = new Set(incoming.map(t => (t.ticker || '').toUpperCase()))
+  // ── Broker trade import ──
+  // Apply a plan from planIbkrImport(). Buys blend into the existing average
+  // cost by quantity; a sell reduces the position and leaves average cost alone
+  // (the standard treatment — cost basis per share doesn't change when you sell
+  // some). Duplicates are dropped, every applied row is recorded in
+  // importedLots so the same statement can't land twice, and anything you've
+  // actually bought stops being a Review candidate. One atomic save.
+  const applyTradeImport = useCallback(plan => {
+    const rows = (plan || []).filter(r => r.status !== 'duplicate' && Math.abs(r.netQty) > 1e-8)
+    if (!rows.length) return { applied: 0, created: 0, clearedFromReview: 0 }
 
-    const nextHoldings = [...holdings]
-    const created = []
-    for (const pos of positions) {
-      if (!touched.has(pos.ticker)) continue
-      const idx = nextHoldings.findIndex(h => (h.ticker || '').toUpperCase() === pos.ticker)
-      if (idx >= 0) {
-        nextHoldings[idx] = { ...nextHoldings[idx], shares: pos.shares, cost: pos.cost }
-        continue
+    const next = [...holdings]
+    const lots = []
+    const bought = new Set()
+    let created = 0
+
+    for (const r of rows) {
+      bought.add(r.symbol)
+      const i = next.findIndex(h => (h.ticker || '').toUpperCase() === r.symbol)
+      if (i === -1) {
+        created++
+        next.push({
+          id: uid(), category: r.category, ticker: r.symbol, name: r.name,
+          // The sticker comes from the plan (review candidate, existing
+          // holding, or listing exchange); the bucket's default is the
+          // fallback. It decides the currency, so it can't be left unset.
+          region: r.region || DEFAULT_CATEGORY_REGION[r.category] || DEFAULT_REGION,
+          shares: r.netQty, cost: r.unitCost, price: r.price,
+          targetPct: r.targetPct ?? 0, finclass: false,
+          thesis: r.thesis || '', theme: r.theme || '',
+        })
+      } else {
+        const h = next[i]
+        const prevShares = h.shares || 0
+        const shares = Math.max(0, prevShares + r.netQty)
+        const cost = r.netQty > 0 && shares > 0
+          ? ((prevShares * (h.cost || 0)) + (r.netQty * r.unitCost)) / shares
+          : (h.cost || 0)
+        // A watchlist entry (no shares yet) may be carrying a hand-typed
+        // placeholder price from the seed data, which would show an absurd P/L
+        // until the next price refresh. The execution price is certainly
+        // fresher. Once shares are actually held, leave the live price alone.
+        const price = prevShares > 0 ? (h.price || r.price) : r.price
+        next[i] = { ...h, shares, cost, price }
       }
-      // Not held yet. A candidate already sitting in the review list brings its
-      // bucket, sticker and thesis along; anything else lands where the import
-      // screen was told to put it.
-      const candidate = reviews.find(r => (r.ticker || '').toUpperCase() === pos.ticker)
-      const place = placements[pos.ticker] || {}
-      const category = place.category || candidate?.category || 'stocks'
-      nextHoldings.push({
-        id: uid(), category,
-        region: place.region || candidate?.region || pos.region || DEFAULT_CATEGORY_REGION[category] || DEFAULT_REGION,
-        ticker: pos.ticker,
-        name: candidate?.name || pos.name || pos.ticker,
-        shares: pos.shares, cost: pos.cost,
-        price: pos.lastPrice || 0, // a placeholder until the next price refresh
-        finclass: false,
-        targetPct: candidate?.groupPct || 0,
-        thesis: candidate?.thesis || '', link: candidate?.link || null, theme: candidate?.theme || '',
+      lots.push({
+        key: r.key, source: 'ibkr', symbol: r.symbol,
+        shares: r.netQty, unitCost: r.unitCost, at: new Date().toISOString(),
       })
-      created.push(pos.ticker)
     }
 
-    // Something you've actually bought isn't a candidate any more.
-    const owned = new Set(positions.filter(p => p.shares > 0).map(p => p.ticker))
-    const nextReviews = reviews.filter(r => !owned.has((r.ticker || '').toUpperCase()))
+    const nextReviews = reviews.filter(r => !bought.has((r.ticker || '').toUpperCase()))
+    const nextLots = [...importedLots, ...lots]
 
-    setLedger(nextTrades)
-    setHoldings(nextHoldings)
+    setHoldings(next)
     setReviews(nextReviews)
-    persistState(nextHoldings, targets, fxRate, accounts, nextReviews)
-    return { added: added.length, created, cleared: reviews.length - nextReviews.length }
-  }, [holdings, reviews, targets, fxRate, accounts, persistState, setLedger])
+    setImportedLots(nextLots)
+    persistState(next, targets, fxRate, accounts, nextReviews, nextLots)
+
+    return { applied: rows.length, created, clearedFromReview: reviews.length - nextReviews.length }
+  }, [holdings, reviews, importedLots, targets, fxRate, accounts, persistState])
 
   return {
     holdings, targets, fxRate, updateFxRate,
-    trades, importTrades,
+    importedLots, applyTradeImport,
     accounts, addAccount, updateAccount, removeAccount,
     reviews, addReview, updateReview, rejectReview, approveReview,
-    priceStatus, priceErrors, lastUpdated, syncStatus,
+    priceStatus, priceErrors, priceMeta, priceCoverage, lastUpdated, syncStatus,
     holdingValue, holdingCost, categoryTotals, regionTotals,
     addHolding, updateHolding, removeHolding, toggleTag,
     updateTarget, splitGroupEvenly, normalizeGroup, manualRefresh, ready,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CATEGORIES, TICKER_INFO, COINGECKO_IDS, categoryById, currencySymbol, holdingCurrency, holdingRegion } from '../data/portfolio';
+import { CATEGORIES, TICKER_INFO, categoryById, currencySymbol, holdingCurrency, holdingRegion } from '../data/portfolio';
 import { Card, CatDot, Chip, RegionBadge, RegionSelect, SectionLabel, TagBadge, Term } from './ui';
 
 // Buckets are the thesis; the sticker on each row is the country. Core buckets
@@ -14,12 +14,17 @@ const SECTIONS = [
 const fmtQty = n => n.toLocaleString('en-US', { maximumFractionDigits: 5 });
 const fmtNum = n => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function HoldingRow({ holding, onUpdate, onRemove, onToggleTag, editMode, onTickerClick }) {
+function HoldingRow({ holding, onUpdate, onRemove, onToggleTag, editMode, onTickerClick, live }) {
   const valLocal = (holding.shares || 0) * (holding.price || 0);
   const costLocal = (holding.shares || 0) * (holding.cost || 0);
   const pnlPct = costLocal > 0 ? ((valLocal - costLocal) / costLocal * 100) : 0;
   const owned = (holding.shares || 0) > 0;
-  const isLive = !!COINGECKO_IDS[holding.ticker?.toUpperCase()];
+  // Truthful per-ticker state: a quote actually arrived this session, and from
+  // where. Previously this was hardcoded to "is it a crypto ticker", so US
+  // stocks never showed LIVE even when Finnhub was answering fine.
+  const isLive = !!live;
+  // Currency comes from the country sticker, not the bucket — a single bucket
+  // can hold a B3 name and a NYSE name.
   const sym = currencySymbol(holdingCurrency(holding));
 
   if (editMode) {
@@ -57,7 +62,9 @@ function HoldingRow({ holding, onUpdate, onRemove, onToggleTag, editMode, onTick
         <RegionBadge region={holding.region} />
         <span className="hold-name">{holding.name}</span>
         {holding.finclass && <TagBadge tag="finclass" />}
-        {isLive && <span className="live-chip">LIVE</span>}
+        {isLive
+          ? <span className="live-chip" title={`Price updated from ${live.source} this session`}>LIVE</span>
+          : owned && <span className="stale-chip" title="No live quote arrived for this one — the price shown is the last saved value. See the price notice above.">stale</span>}
       </span>
       <span className="num mono">{owned ? fmtQty(holding.shares) : '—'}</span>
       <span className="num mono">{fmtNum(holding.cost || 0)}</span>
@@ -101,7 +108,49 @@ function TickerModal({ holding, onClose }) {
   );
 }
 
-export default function Holdings({ holdings, addHolding, updateHolding, removeHolding, toggleTag, holdingValue, holdingCost, focusCategory, onFocusHandled }) {
+// Why prices aren't updating, in plain language. The errors were previously
+// collected by the price service and then thrown away, so a dead API key looked
+// identical to a quiet market.
+function PriceNotice({ errors, coverage }) {
+  const [open, setOpen] = useState(false);
+  if (!errors?.length) return null;
+  const affected = [...new Set(errors.flatMap(e => e.tickers || []))];
+  return (
+    <div className="price-notice">
+      <button type="button" className="pn-head" onClick={() => setOpen(o => !o)}>
+        <span className="pn-caret">{open ? '▾' : '▸'}</span>
+        <b>
+          {coverage?.total
+            ? `${coverage.live} of ${coverage.total} prices are live`
+            : 'Some prices could not be updated'}
+        </b>
+        <span className="pn-sub">
+          {affected.length} {affected.length === 1 ? 'holding' : 'holdings'} showing a saved price — tap for why
+        </span>
+      </button>
+      {open && (
+        <div className="pn-body">
+          {errors.map((e, i) => (
+            <div className="pn-row" key={i}>
+              <Chip tone="warn">{e.source}</Chip>
+              <div>
+                <div className="pn-msg">{e.message}</div>
+                <div className="pn-tickers mono">{(e.tickers || []).join(', ')}</div>
+              </div>
+            </div>
+          ))}
+          <p className="pn-foot">
+            Keys live in Vercel → Settings → Environment Variables (<span className="mono">VITE_FINNHUB_KEY</span>,
+            {' '}<span className="mono">VITE_BRAPI_KEY</span>). After changing one you have to redeploy for it to take effect.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Holdings({ holdings, addHolding, updateHolding, removeHolding, toggleTag, holdingValue, holdingCost,
+  focusCategory, onFocusHandled, priceErrors, priceMeta = {}, priceCoverage }) {
   const [editMode, setEditMode] = useState(false);
   const [infoHolding, setInfoHolding] = useState(null);
 
@@ -141,6 +190,7 @@ export default function Holdings({ holdings, addHolding, updateHolding, removeHo
 
   return (
     <div className="screen">
+      <PriceNotice errors={priceErrors} coverage={priceCoverage} />
       <div className="hold-toolbar">
         <span className="hold-legend">
           <TagBadge tag="finclass" /> FinClass pick &nbsp;·&nbsp; <RegionBadge region="us" /> where it trades &nbsp;·&nbsp;
@@ -209,6 +259,7 @@ export default function Holdings({ holdings, addHolding, updateHolding, removeHo
                       onToggleTag={toggleTag}
                       editMode={editMode}
                       onTickerClick={setInfoHolding}
+                      live={priceMeta[h.ticker?.toUpperCase()]}
                     />
                   ))}
                   {items.length === 0 && (

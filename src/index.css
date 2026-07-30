@@ -503,6 +503,19 @@ main { display: block; }
 .ticker:hover { background: var(--accent); color: #fff; }
 .hold-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .live-chip { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; background: var(--accent-soft); color: var(--accent-deep); border-radius: 5px; padding: 1px 5px; }
+.stale-chip { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; background: var(--warn-bg); color: var(--warn-ink); border-radius: 5px; padding: 1px 5px; cursor: help; }
+
+/* Why prices didn't update — collapsed by default, expandable for detail */
+.price-notice { border: 1px solid var(--warn-bg); background: color-mix(in oklch, var(--warn-bg) 45%, var(--surface)); border-radius: var(--radius); overflow: hidden; }
+.pn-head { display: flex; align-items: baseline; gap: 9px; width: 100%; text-align: left; background: none; border: 0; padding: 13px 18px; font: inherit; font-size: 13.5px; color: var(--ink); flex-wrap: wrap; }
+.pn-head:hover { background: color-mix(in oklch, var(--warn-bg) 70%, transparent); }
+.pn-caret { font-size: 10px; }
+.pn-sub { font-size: 12.5px; color: var(--muted); }
+.pn-body { padding: 0 18px 16px; display: flex; flex-direction: column; gap: 12px; }
+.pn-row { display: flex; align-items: flex-start; gap: 10px; }
+.pn-msg { font-size: 13px; color: color-mix(in oklch, var(--ink) 85%, var(--muted)); }
+.pn-tickers { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.pn-foot { font-size: 12px; color: var(--muted); border-top: 1px solid var(--warn-bg); padding-top: 10px; }
 
 .h-input {
   border: 1px solid var(--line); border-radius: 8px;
@@ -689,6 +702,68 @@ main { display: block; }
 .imp-actions { display: flex; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
 .imp-summary { font-size: 12.5px; color: var(--muted); flex: 1; min-width: 200px; }
 .imp-actions .btn-soft[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* ---------- import: live upload + preview ---------- */
+.dropzone {
+  display: block; width: 100%; font: inherit; color: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.dropzone:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone.dragging { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone:disabled { cursor: progress; }
+.dz-btn { display: inline-block; margin-top: 14px; }
+.dz-input { display: none; }
+.dz-file { margin-top: 10px; font-size: 12.5px; color: var(--accent-deep); }
+
+/* Only a source that actually does something gets the clickable affordance. */
+.import-card.import-live {
+  border-color: var(--accent-soft); background: var(--accent-faint);
+  display: block; width: 100%; text-align: left; font: inherit; color: inherit;
+}
+.import-card.import-soon { cursor: default; opacity: 0.72; }
+.import-card.import-soon:hover { transform: none; box-shadow: var(--shadow); }
+.import-cta { display: inline-block; margin-top: 10px; font-size: 12.5px; font-weight: 600; color: var(--accent-deep); }
+.import-name .chip { margin-left: 6px; vertical-align: 2px; }
+
+.import-error { border-color: color-mix(in oklch, var(--down) 45%, var(--line)); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.import-error p { font-size: 13.5px; color: var(--muted); }
+.import-done { border-color: var(--accent); background: var(--accent-faint); }
+.import-done p { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+
+.imp-table { display: flex; flex-direction: column; }
+.imp-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.6fr) 130px 108px 104px 100px minmax(150px, 1fr);
+  align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.imp-row:last-child { border-bottom: 0; }
+.imp-head {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--muted);
+}
+.imp-dim { opacity: 0.5; }
+.imp-num { text-align: right; }
+.imp-sym { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.imp-tick { font-weight: 700; font-size: 13px; }
+.imp-name { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.imp-cat { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.imp-effect { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.imp-sub { font-size: 11.5px; color: var(--muted); font-family: var(--font-mono); }
+
+.imp-foot { display: flex; align-items: center; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.imp-totals { display: flex; align-items: baseline; gap: 7px; font-size: 13.5px; color: var(--muted); flex-wrap: wrap; }
+.imp-foot .btn-soft { padding: 8px 16px; }
+.imp-foot .btn-soft:disabled { opacity: 0.45; cursor: default; }
+.imp-foot .btn-soft:disabled:hover { border-color: var(--line); color: var(--ink); background: var(--surface); }
+.imp-note { margin-top: 12px; }
+
+@media (max-width: 900px) {
+  .imp-row { grid-template-columns: minmax(120px, 1.4fr) 92px 88px minmax(120px, 1fr); gap: 8px; }
+  .imp-row > :nth-child(2), .imp-row > :nth-child(5) { display: none; }
+  .imp-name { display: none; }
+}
 
 /* ---------- budget mode (warm "Honey" sibling theme) ---------- */
 /* Same Sea Glass bones, but toggling to Budget swaps the palette to a warm

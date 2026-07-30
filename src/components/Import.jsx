@@ -1,212 +1,234 @@
-import { useRef, useState } from 'react';
-import { CATEGORIES, REGIONS, categoryById, holdingCurrency, regionById } from '../data/portfolio';
-import { parseTradeConfirmation, positionsFromTrades, tradeId } from '../lib/trades';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { CATEGORIES } from '../data/portfolio';
+import { parseIbkrFile, planIbkrImport, importSummary, ImportError } from '../lib/ibkr';
 import { Card, CatDot, Chip, RegionBadge, SectionLabel, Term } from './ui';
+import { fmt } from '../lib/format';
 
-// Sources that don't have a parser yet. IBKR trade confirmations are live; the
-// rest still get typed in by hand.
+// Sources are listed with an explicit `live` flag rather than a blanket
+// "coming soon" banner, so it's obvious which ones actually do something.
 const SOURCES = [
-  { id: 'wealthfront', name: 'Wealthfront',          icon: '🏛️', detail: 'Savings balance from the account CSV export' },
-  { id: 'chase_bank',  name: 'Chase Bank',            icon: '🏦', detail: 'Checking balances — already live on the Budget tab' },
+  { id: 'ibkr',        name: 'Interactive Brokers',   icon: '🌐', live: true,  detail: 'Trade Confirmation report (PDF) — updates holdings and average cost' },
+  { id: 'wealthfront', name: 'Wealthfront',           icon: '🏛️', detail: 'Savings balance from the account CSV export' },
+  { id: 'chase_bank',  name: 'Chase Bank',            icon: '🏦', detail: 'Checking balances — available on the Budget side' },
   { id: 'kraken',      name: 'Kraken',                icon: '🪙', detail: 'Crypto positions and balances from the ledger CSV' },
   { id: 'fidelity',    name: 'Fidelity',              icon: '📈', detail: 'US stock positions from the portfolio CSV' },
   { id: 'b3',          name: 'B3 / Brazilian broker', icon: '🇧🇷', detail: 'Notas de corretagem and position reports' },
-  { id: 'other',       name: 'Other',                 icon: '📄', detail: 'Any CSV — map the columns manually' },
 ];
 
-const fmtQty = n => n.toLocaleString('en-US', { maximumFractionDigits: 5 });
-const fmtMoney = n => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const catName = id => CATEGORIES.find(c => c.id === id)?.name || id;
+const catColor = id => CATEGORIES.find(c => c.id === id)?.color;
+const qty = n => n.toLocaleString('en-US', { maximumFractionDigits: 6 });
 
-export default function Import({ holdings = [], reviews = [], trades = [], importTrades }) {
-  const fileRef = useRef(null);
+const STATUS = {
+  new:         { label: 'New position', tone: 'up' },
+  'first-buy': { label: 'First buy',    tone: 'up' },
+  add:         { label: 'Adds to position', tone: 'up' },
+  sell:        { label: 'Sell', tone: 'warn' },
+  duplicate:   { label: 'Already imported', tone: 'soft' },
+};
+
+export default function Import({ holdings = [], reviews = [], importedLots = [], applyTradeImport }) {
+  const [file, setFile] = useState(null);
+  const [parsed, setParsed] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [result, setResult] = useState(null);   // what a successful apply did
-  const [parsed, setParsed] = useState(null);   // { fileName, trades, problems, … }
-  const [placements, setPlacements] = useState({});
+  const [result, setResult] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef(null);
 
-  const holdingFor = ticker => holdings.find(h => (h.ticker || '').toUpperCase() === ticker);
-  const candidateFor = ticker => reviews.find(r => (r.ticker || '').toUpperCase() === ticker);
+  const plan = useMemo(
+    () => parsed ? planIbkrImport(parsed, { holdings, reviews, importedLots }) : null,
+    [parsed, holdings, reviews, importedLots]);
+  const summary = plan ? importSummary(plan) : null;
 
-  async function handleFile(file) {
-    if (!file) return;
-    setBusy(true); setError(null); setResult(null); setParsed(null);
+  const handleFile = useCallback(async f => {
+    if (!f) return;
+    setBusy(true); setError(null); setResult(null); setParsed(null); setFile(f);
     try {
-      const out = await parseTradeConfirmation(file);
-      // Preview the whole ledger as it *would* be, so an overlapping report
-      // shows the same numbers the apply will write.
-      const known = new Set(trades.map(t => t.id || tradeId(t)));
-      const fresh = out.trades.filter(t => !known.has(t.id));
-      const positions = positionsFromTrades([...trades, ...out.trades])
-        .filter(p => out.trades.some(t => t.ticker === p.ticker));
-
-      const place = {};
-      for (const p of positions) {
-        if (holdingFor(p.ticker)) continue;
-        const c = candidateFor(p.ticker);
-        place[p.ticker] = { category: c?.category || 'stocks', region: c?.region || p.region || 'us' };
-      }
-      setPlacements(place);
-      setParsed({ fileName: file.name, ...out, fresh, positions });
+      setParsed(await parseIbkrFile(f));
     } catch (e) {
-      setError(e.message || String(e));
+      setError(e instanceof ImportError ? e.message : `Couldn't read that file: ${e.message}`);
     } finally {
       setBusy(false);
     }
-  }
+  }, []);
 
-  function apply() {
-    const summary = importTrades(parsed.trades, placements);
-    setResult({ ...summary, fileName: parsed.fileName, tickers: parsed.positions.length });
+  const onDrop = e => {
+    e.preventDefault(); setDragging(false);
+    handleFile(e.dataTransfer?.files?.[0]);
+  };
+
+  // Accept a drop anywhere on the tab, not just inside the dashed box — people
+  // aim at the source card they recognise, or just at the page.
+  const pageDrag = {
+    onDragOver: e => { e.preventDefault(); setDragging(true); },
+    onDragLeave: e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); },
+    onDrop,
+  };
+  const pickFile = () => inputRef.current?.click();
+
+  const reset = () => { setFile(null); setParsed(null); setError(null); setResult(null); if (inputRef.current) inputRef.current.value = ''; };
+
+  const apply = () => {
+    const res = applyTradeImport(plan);
+    setResult(res);
     setParsed(null);
-    if (fileRef.current) fileRef.current.value = '';
-  }
-
-  const blocked = parsed?.problems?.length > 0;
+    setFile(null);
+    if (inputRef.current) inputRef.current.value = '';
+  };
 
   return (
-    <div className="screen">
+    <div className="screen" {...pageDrag}>
       <div className="import-hero">
         <h2>Import from a file</h2>
         <p>
-          Everything is parsed in your browser — the file never leaves this page. You'll see exactly
-          what would change before anything is saved, and an import only ever writes{' '}
-          <b>quantity</b> and <b>average cost</b>. Your targets, buckets and country stickers are never touched.
+          Drop a broker report anywhere on this page and you'll see exactly what
+          would change — nothing is saved until you confirm.
         </p>
       </div>
 
-      <Card className="import-live">
-        <div className="import-live-head">
-          <span className="import-icon">🌐</span>
-          <div>
-            <div className="import-name">Interactive Brokers — Trade Confirmation</div>
-            <p className="import-note">
-              In IBKR: <b>Performance &amp; Reports → Statements → Trade Confirmations</b>, then download the PDF.
-              Each file covers one trading day; import them as they come and the{' '}
-              <Term tip="Every fill you've imported, oldest first. Quantity and average cost are recalculated from it, so importing the same file twice changes nothing.">running average cost</Term>{' '}
-              builds itself. Commissions are folded into cost — money spent to own it is part of what it cost.
-            </p>
-          </div>
-          {trades.length > 0 && <Chip tone="soft" title="Fills already in your ledger">{trades.length} fills imported</Chip>}
-        </div>
+      {/* The file input lives outside the dropzone so the source cards below
+          can trigger it too. */}
+      <input ref={inputRef} type="file" accept=".pdf,application/pdf" className="dz-input"
+        onChange={e => handleFile(e.target.files?.[0])} />
 
-        <div className="dropzone"
-          onDragOver={e => { e.preventDefault(); }}
-          onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
-          onClick={() => fileRef.current?.click()}>
-          <div className="dropzone-title">{busy ? 'Reading…' : 'Drop the PDF here, or click to choose'}</div>
-          <p>Trade Confirmation Report · PDF</p>
-          <input ref={fileRef} type="file" accept="application/pdf,.pdf" hidden
-            onChange={e => handleFile(e.target.files?.[0])} />
-        </div>
+      {/* ── Dropzone ── */}
+      <button type="button" className={'dropzone' + (dragging ? ' dragging' : '')}
+        onClick={pickFile} disabled={busy}>
+        <div className="dropzone-title">{busy ? 'Reading your report…' : 'Drop your IBKR report here'}</div>
+        <p>
+          Interactive Brokers → <b>Performance &amp; Reports</b> → Trade Confirmations → download as <b>PDF</b>.
+        </p>
+        <span className="btn-soft dz-btn">{busy ? 'Reading…' : 'Choose a file'}</span>
+        {file && !busy && <p className="dz-file mono">{file.name}</p>}
+      </button>
 
-        {error && (
-          <div className="import-error">
-            <b>Couldn't read that file.</b> {error}
-          </div>
-        )}
-
-        {result && (
-          <div className="import-ok">
-            <b>✓ Imported {result.fileName}</b> — {result.added} new fill{result.added === 1 ? '' : 's'} across{' '}
-            {result.tickers} ticker{result.tickers === 1 ? '' : 's'}.
-            {result.created.length > 0 && <> Added to Holdings: <b>{result.created.join(', ')}</b>.</>}
-            {result.cleared > 0 && <> Cleared {result.cleared} candidate{result.cleared === 1 ? '' : 's'} from Review — you own {result.cleared === 1 ? 'it' : 'them'} now.</>}
-            {result.added === 0 && <> Every fill in this file was already in your ledger, so nothing changed.</>}
-          </div>
-        )}
-      </Card>
-
-      {parsed && (
-        <>
-          <SectionLabel right={
-            <span className="section-label-right">
-              <Chip tone={blocked ? 'warn' : 'up'} title="The report's own subtotals and grand total, checked against the parse">
-                {blocked ? '⚠ does not reconcile' : '✓ reconciles with the report'}
-              </Chip>
-              <Chip tone="soft">{parsed.fresh.length} new of {parsed.trades.length} fills</Chip>
-            </span>
-          }>Preview · {parsed.fileName}</SectionLabel>
-
-          {blocked && (
-            <div className="import-error">
-              <b>Not applying this one.</b> The parsed fills don't add up to the totals printed on the report,
-              which means a row was misread. Applying it would quietly put the wrong quantity in your portfolio.
-              <ul>{parsed.problems.map((p, i) => <li key={i}>{p}</li>)}</ul>
-            </div>
-          )}
-
-          <Card>
-            <div className="imp-table">
-              <div className="imp-row imp-head">
-                <span>Ticker</span>
-                <span>Goes to</span>
-                <span className="num">Qty now</span>
-                <span className="num">Qty after</span>
-                <span className="num">Avg cost now</span>
-                <span className="num"><Term tip="Weighted average of every fill in the ledger, commission included.">Avg cost after</Term></span>
-              </div>
-              {parsed.positions.map(p => {
-                const held = holdingFor(p.ticker);
-                const cand = candidateFor(p.ticker);
-                const place = placements[p.ticker];
-                const cat = categoryById(held?.category || place?.category);
-                const sym = held ? (holdingCurrency(held) === 'BRL' ? 'R$' : '$')
-                  : (regionById(place?.region).currency === 'BRL' ? 'R$' : '$');
-                return (
-                  <div className="imp-row" key={p.ticker}>
-                    <span className="imp-tick">
-                      <span className="ticker">{p.ticker}</span>
-                      {!held && <Chip tone={cand ? 'up' : 'soft'}>{cand ? 'from Review' : 'new'}</Chip>}
-                    </span>
-                    <span className="imp-goes">
-                      {held ? (
-                        <><CatDot color={cat?.color} /> {cat?.name} <RegionBadge region={held.region} /></>
-                      ) : (
-                        <>
-                          <select className="rev-select" value={place?.category || 'stocks'}
-                            onChange={e => setPlacements(s => ({ ...s, [p.ticker]: { ...s[p.ticker], category: e.target.value } }))}>
-                            {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          </select>
-                          <select className={'region-select region-' + (place?.region || 'us')} value={place?.region || 'us'}
-                            onChange={e => setPlacements(s => ({ ...s, [p.ticker]: { ...s[p.ticker], region: e.target.value } }))}>
-                            {REGIONS.map(r => <option key={r.id} value={r.id}>{r.code}</option>)}
-                          </select>
-                        </>
-                      )}
-                    </span>
-                    <span className="num mono">{held ? fmtQty(held.shares || 0) : '—'}</span>
-                    <span className="num mono up">{fmtQty(p.shares)}</span>
-                    <span className="num mono">{held?.cost ? sym + fmtMoney(held.cost) : '—'}</span>
-                    <span className="num mono up">{sym + fmtMoney(p.cost)}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="imp-actions">
-              <span className="imp-summary">
-                {parsed.trades.length} fill{parsed.trades.length === 1 ? '' : 's'} ·{' '}
-                {parsed.duplicatesCollapsed > 0 && <>{parsed.duplicatesCollapsed} duplicated fractional line{parsed.duplicatesCollapsed === 1 ? '' : 's'} collapsed · </>}
-                commission {parsed.grandTotal ? '$' + fmtMoney(Math.abs(parsed.grandTotal.commission)) : '—'} folded into cost
-              </span>
-              <button type="button" className="btn-soft" onClick={() => setParsed(null)}>Cancel</button>
-              <button type="button" className="btn-soft on" disabled={blocked} onClick={apply}>
-                ✓ Apply to Holdings
-              </button>
-            </div>
-          </Card>
-        </>
+      {error && (
+        <Card className="import-error">
+          <b>Couldn't import that file</b>
+          <p>{error}</p>
+          <button type="button" className="btn-soft" onClick={reset}>Try another file</button>
+        </Card>
       )}
 
-      <SectionLabel>Not wired up yet</SectionLabel>
+      {result && (
+        <Card className="import-done">
+          <b>✓ Imported {result.applied} {result.applied === 1 ? 'position' : 'positions'}</b>
+          <p>
+            {result.created > 0 && <>{result.created} new {result.created === 1 ? 'holding' : 'holdings'} created. </>}
+            {result.clearedFromReview > 0 && <>{result.clearedFromReview} cleared from the Review list. </>}
+            Check the <b>Holdings</b> tab — prices refresh on the next update.
+          </p>
+        </Card>
+      )}
+
+      {/* ── Preview ── */}
+      {plan && summary && (
+        <Card>
+          <SectionLabel right={
+            <>
+              {parsed.account && <Chip tone="soft">{parsed.account}</Chip>}
+              {parsed.period && <Chip tone="soft">{parsed.period.label}</Chip>}
+            </>
+          }>
+            What this would change
+          </SectionLabel>
+
+          <div className="imp-table">
+            <div className="imp-row imp-head">
+              <span>Investment</span>
+              <span>Goes to</span>
+              <span className="imp-num">Quantity</span>
+              <span className="imp-num">
+                <Term tip="The per-share cost including commission — this is what IBKR shows as your average price, so the two match.">Cost / share</Term>
+              </span>
+              <span className="imp-num">Amount</span>
+              <span>Effect</span>
+            </div>
+
+            {plan.map(r => {
+              const st = STATUS[r.status] || STATUS.add;
+              const dim = r.status === 'duplicate';
+              return (
+                <div className={'imp-row' + (dim ? ' imp-dim' : '')} key={r.key + r.symbol}>
+                  <span className="imp-sym">
+                    <span className="mono imp-tick">{r.symbol}</span>
+                    <span className="imp-name">{r.name}</span>
+                    {r.fromReview && !dim && <Chip tone="soft" title="This was on your Review shortlist — importing clears it from there.">from Review</Chip>}
+                  </span>
+                  <span className="imp-cat">
+                    <CatDot color={catColor(r.category)} size={9} /> {catName(r.category)}
+                    {/* the bucket says what kind of bet it is, the sticker where
+                        it trades — and the sticker is what sets its currency */}
+                    <RegionBadge region={r.region} size="sm" />
+                  </span>
+                  <span className="imp-num mono">{qty(Math.abs(dim ? r.qty : r.netQty))}</span>
+                  <span className="imp-num mono">{fmt(r.unitCost)}</span>
+                  <span className="imp-num mono">{fmt(Math.abs(dim ? r.qty : r.netQty) * r.unitCost)}</span>
+                  <span className="imp-effect">
+                    <Chip tone={st.tone}>{st.label}</Chip>
+                    {r.status === 'add' && (
+                      <span className="imp-sub">
+                        {qty(r.existingShares)} → {qty(r.existingShares + r.netQty)} sh
+                      </span>
+                    )}
+                    {dim && <span className="imp-sub">skipped</span>}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="imp-foot">
+            <div className="imp-totals">
+              <span><b>{summary.applying}</b> to apply</span>
+              {summary.duplicates > 0 && <span>· {summary.duplicates} already imported</span>}
+              {summary.newPositions > 0 && <span>· {summary.newPositions} new</span>}
+              <span>· <b className="mono">{fmt(summary.cash)}</b> invested</span>
+              {parsed.totalComm > 0 && <span className="imp-sub">(incl. {fmt(parsed.totalComm)} commission)</span>}
+            </div>
+            <span className="rev-spacer" />
+            <button type="button" className="btn-soft" onClick={reset}>Cancel</button>
+            <button type="button" className="btn-soft on" disabled={summary.applying === 0} onClick={apply}>
+              {summary.applying === 0 ? 'Nothing new to import' : `Apply ${summary.applying} to my portfolio`}
+            </button>
+          </div>
+
+          {summary.duplicates > 0 && (
+            <p className="reb-tip imp-note">
+              Rows marked <i>already imported</i> were applied from a previous upload of this
+              same statement period, so they're skipped — importing twice won't double your position.
+            </p>
+          )}
+          <p className="reb-tip imp-note">
+            Cash balances aren't touched — a trade confirmation doesn't state your account
+            balance. Update Interactive Brokers under <b>Overview → Accounts</b>.
+          </p>
+        </Card>
+      )}
+
+      {/* ── Sources ──
+          A live source is a real button that opens the picker, because a card
+          that lifts on hover reads as clickable and has to actually be
+          clickable. The ones that aren't wired up yet are inert <div>s so they
+          don't make the same promise. */}
+      <SectionLabel>Where you can import from</SectionLabel>
       <div className="import-grid">
-        {SOURCES.map(s => (
-          <Card className="import-card" key={s.id}>
+        {SOURCES.map(s => s.live ? (
+          <button type="button" className="card import-card import-live" key={s.id}
+            onClick={pickFile} disabled={busy}
+            title="Choose an Interactive Brokers PDF to import">
             <div className="import-icon">{s.icon}</div>
-            <div className="import-name">{s.name}</div>
+            <div className="import-name">{s.name} <Chip tone="up">LIVE</Chip></div>
             <p className="import-note">{s.detail}</p>
-          </Card>
+            <span className="import-cta">Choose a file →</span>
+          </button>
+        ) : (
+          <div className="card import-card import-soon" key={s.id}>
+            <div className="import-icon">{s.icon}</div>
+            <div className="import-name">{s.name} <Chip tone="soft">soon</Chip></div>
+            <p className="import-note">{s.detail}</p>
+          </div>
         ))}
       </div>
     </div>
