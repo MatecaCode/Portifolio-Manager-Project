@@ -24,6 +24,14 @@ create policy "household access"
 revoke all on portfolio_state from anon;
 grant select, insert, update, delete on portfolio_state to authenticated;
 
+-- Columns added after the original table: cash accounts, the Review shortlist,
+-- and the ledger of broker trades already imported (used to stop a re-uploaded
+-- statement from doubling a position).
+alter table portfolio_state
+  add column if not exists accounts      jsonb not null default '[]',
+  add column if not exists reviews       jsonb not null default '[]',
+  add column if not exists imported_lots jsonb not null default '[]';
+
 -- Seed the single shared row
 insert into portfolio_state (id)
   values ('shared')

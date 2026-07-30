@@ -600,6 +600,56 @@ main { display: block; }
 .dropzone-title { font-weight: 700; font-size: 17px; margin-bottom: 4px; }
 .dropzone p { font-size: 13.5px; color: var(--muted); max-width: 480px; margin: 0 auto; }
 
+/* ---------- import: live upload + preview ---------- */
+.dropzone { transition: border-color 0.15s ease, background 0.15s ease; }
+.dropzone.dragging { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone .btn-soft { margin-top: 14px; }
+.dz-input { display: none; }
+.dz-file { margin-top: 10px; font-size: 12.5px; color: var(--accent-deep); }
+
+.import-card.import-live { border-color: var(--accent-soft); background: var(--accent-faint); }
+.import-name .chip { margin-left: 6px; vertical-align: 2px; }
+
+.import-error { border-color: color-mix(in oklch, var(--down) 45%, var(--line)); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.import-error p { font-size: 13.5px; color: var(--muted); }
+.import-done { border-color: var(--accent); background: var(--accent-faint); }
+.import-done p { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+
+.imp-table { display: flex; flex-direction: column; }
+.imp-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.6fr) 130px 108px 104px 100px minmax(150px, 1fr);
+  align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.imp-row:last-child { border-bottom: 0; }
+.imp-head {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--muted);
+}
+.imp-dim { opacity: 0.5; }
+.imp-num { text-align: right; }
+.imp-sym { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.imp-tick { font-weight: 700; font-size: 13px; }
+.imp-name { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.imp-cat { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.imp-effect { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.imp-sub { font-size: 11.5px; color: var(--muted); font-family: var(--font-mono); }
+
+.imp-foot { display: flex; align-items: center; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.imp-totals { display: flex; align-items: baseline; gap: 7px; font-size: 13.5px; color: var(--muted); flex-wrap: wrap; }
+.imp-foot .btn-soft { padding: 8px 16px; }
+.imp-foot .btn-soft:disabled { opacity: 0.45; cursor: default; }
+.imp-foot .btn-soft:disabled:hover { border-color: var(--line); color: var(--ink); background: var(--surface); }
+.imp-note { margin-top: 12px; }
+
+@media (max-width: 900px) {
+  .imp-row { grid-template-columns: minmax(120px, 1.4fr) 92px 88px minmax(120px, 1fr); gap: 8px; }
+  .imp-row > :nth-child(2), .imp-row > :nth-child(5) { display: none; }
+  .imp-name { display: none; }
+}
+
 /* ---------- budget mode (warm "Honey" sibling theme) ---------- */
 /* Same Sea Glass bones, but toggling to Budget swaps the palette to a warm
    sunrise so it instantly feels like its own little platform. */

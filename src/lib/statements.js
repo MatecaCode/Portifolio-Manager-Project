@@ -54,6 +54,42 @@ export async function extractPdfLines(file) {
   return lines
 }
 
+// Extract text as visual table ROWS of cells, honouring page rotation.
+//
+// extractPdfLines() above groups by the raw text-matrix y, which is correct for
+// upright pages but scrambles rotated ones: IBKR renders its statements at
+// rotate=90, so a visual row shares an x coordinate, not a y. Mapping every
+// item through the page viewport first puts it in on-screen coordinates, after
+// which "group by y, sort by x" is right for any rotation.
+//
+// Kept separate from extractPdfLines rather than replacing it — the Chase and
+// Wealthfront parsers are tuned against that function's output and there's no
+// reason to disturb them.
+export async function extractPdfRows(file) {
+  const pdfjs = await loadPdfjs()
+  const buf = await file.arrayBuffer()
+  const doc = await pdfjs.getDocument({ data: buf }).promise
+  const out = []
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p)
+    const viewport = page.getViewport({ scale: 1 })
+    const content = await page.getTextContent()
+    const rows = []
+    for (const item of content.items) {
+      if (!item.str || !item.str.trim()) continue
+      const [vx, vy] = viewport.convertToViewportPoint(item.transform[4], item.transform[5])
+      let row = rows.find(r => Math.abs(r.y - vy) <= 3)
+      if (!row) { row = { y: vy, cells: [] }; rows.push(row) }
+      row.cells.push({ x: vx, str: item.str.trim() })
+    }
+    rows.sort((a, b) => a.y - b.y)
+    for (const row of rows) {
+      out.push(row.cells.sort((a, b) => a.x - b.x).map(c => c.str).filter(Boolean))
+    }
+  }
+  return out
+}
+
 const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december']
 
 // some PDFs emit the minus sign as its own text item ("- 25.00")
