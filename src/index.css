@@ -451,6 +451,19 @@ main { display: block; }
 .ticker:hover { background: var(--accent); color: #fff; }
 .hold-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .live-chip { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; background: var(--accent-soft); color: var(--accent-deep); border-radius: 5px; padding: 1px 5px; }
+.stale-chip { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; background: var(--warn-bg); color: var(--warn-ink); border-radius: 5px; padding: 1px 5px; cursor: help; }
+
+/* Why prices didn't update — collapsed by default, expandable for detail */
+.price-notice { border: 1px solid var(--warn-bg); background: color-mix(in oklch, var(--warn-bg) 45%, var(--surface)); border-radius: var(--radius); overflow: hidden; }
+.pn-head { display: flex; align-items: baseline; gap: 9px; width: 100%; text-align: left; background: none; border: 0; padding: 13px 18px; font: inherit; font-size: 13.5px; color: var(--ink); flex-wrap: wrap; }
+.pn-head:hover { background: color-mix(in oklch, var(--warn-bg) 70%, transparent); }
+.pn-caret { font-size: 10px; }
+.pn-sub { font-size: 12.5px; color: var(--muted); }
+.pn-body { padding: 0 18px 16px; display: flex; flex-direction: column; gap: 12px; }
+.pn-row { display: flex; align-items: flex-start; gap: 10px; }
+.pn-msg { font-size: 13px; color: color-mix(in oklch, var(--ink) 85%, var(--muted)); }
+.pn-tickers { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.pn-foot { font-size: 12px; color: var(--muted); border-top: 1px solid var(--warn-bg); padding-top: 10px; }
 
 .h-input {
   border: 1px solid var(--line); border-radius: 8px;

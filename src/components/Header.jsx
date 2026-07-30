@@ -10,6 +10,7 @@ export default function Header({ priceStatus, syncStatus, lastUpdated, onRefresh
 
   const priceLabel = {
     live:    timeStr ? `⚡ Prices live · ${timeStr}` : '⚡ Prices live',
+    partial: '⚠ Some prices stale',
     error:   '⚠ Price error',
     loading: '⟳ Updating…',
     idle:    '… Connecting',
@@ -46,8 +47,11 @@ export default function Header({ priceStatus, syncStatus, lastUpdated, onRefresh
           </Chip>
         )}
         {mode !== 'budget' && (
-          <button className="chip chip-up chip-btn" onClick={onRefresh}
-            title="Prices update automatically every 5 minutes. Click any time to refresh them now.">
+          <button className={'chip chip-btn ' + (priceStatus === 'partial' || priceStatus === 'error' ? 'chip-warn' : 'chip-up')}
+            onClick={onRefresh}
+            title={priceStatus === 'partial' || priceStatus === 'error'
+              ? 'Some quotes did not arrive. Open the Holdings tab for the reason. Click to retry now.'
+              : 'Prices update automatically every 5 minutes. Click any time to refresh them now.'}>
             {priceLabel}
           </button>
         )}
