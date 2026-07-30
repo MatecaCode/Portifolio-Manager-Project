@@ -188,7 +188,7 @@ export function usePortfolio() {
   const addHolding = useCallback(categoryId => {
     setHoldings(prev => {
       const next = [...prev, { id: uid(), category: categoryId, region: DEFAULT_CATEGORY_REGION[categoryId] || DEFAULT_REGION,
-        ticker: '', name: '', shares: 0, cost: 0, price: 0, finclass: false }]
+        ticker: '', name: '', shares: 0, cost: 0, price: 0, targetPct: 0, finclass: false }]
       persistState(next, targets, fxRate, accounts, reviews)
       return next
     })
@@ -198,7 +198,7 @@ export function usePortfolio() {
     setHoldings(prev => {
       const next = prev.map(h => {
         if (h.id !== id) return h
-        const num = ['shares','cost','price'].includes(field)
+        const num = ['shares','cost','price','targetPct'].includes(field)
         return { ...h, [field]: num ? (parseFloat(value) || 0) : value }
       })
       persistState(next, targets, fxRate, accounts, reviews)
@@ -213,6 +213,39 @@ export function usePortfolio() {
   const toggleTag = useCallback((id, tag) => {
     setHoldings(prev => { const next = prev.map(h => h.id === id ? { ...h, [tag]: !h[tag] } : h); persistState(next, targets, fxRate, accounts, reviews); return next })
   }, [targets, fxRate, accounts, reviews, persistState])
+
+  // ── Within-group targets (layer 2) ──
+  // Each holding carries `targetPct`: its share *of its own group*, so a group
+  // at 20% split 60/40 means 12% and 8% of the whole portfolio. Write a whole
+  // group at once from a raw weight function, rescaled to exactly 100%.
+  const setGroupTargets = useCallback((catId, weightOf) => {
+    setHoldings(prev => {
+      const members = prev.filter(h => h.category === catId)
+      const raw = members.map(h => Math.max(0, weightOf(h)))
+      const total = raw.reduce((a, v) => a + v, 0)
+      if (!members.length || total <= 0) return prev
+      // Largest-remainder apportionment in tenths of a percent: round everyone
+      // down, then hand the leftover tenths to whoever was cut hardest. A group
+      // then always reads exactly 100.0% — never 99.9% — and an even split
+      // stays even (six names → 16.7/16.7/16.7/16.7/16.6/16.6) instead of
+      // dumping the whole rounding error on one unlucky row.
+      const exact = raw.map(v => (v / total) * 1000)
+      const tenths = exact.map(Math.floor)
+      let left = 1000 - tenths.reduce((a, v) => a + v, 0)
+      exact.map((v, i) => ({ i, rem: v - Math.floor(v) }))
+        .sort((a, b) => b.rem - a.rem)
+        .forEach(({ i }) => { if (left > 0) { tenths[i]++; left-- } })
+      const byId = new Map(members.map((h, i) => [h.id, tenths[i] / 10]))
+      const next = prev.map(h => byId.has(h.id) ? { ...h, targetPct: byId.get(h.id) } : h)
+      persistState(next, targets, fxRate, accounts, reviews)
+      return next
+    })
+  }, [targets, fxRate, accounts, reviews, persistState])
+
+  // Same weight for every name in the group
+  const splitGroupEvenly = useCallback(catId => setGroupTargets(catId, () => 1), [setGroupTargets])
+  // Keep the weights that are already typed, just scale them up/down to 100%
+  const normalizeGroup = useCallback(catId => setGroupTargets(catId, h => parseFloat(h.targetPct) || 0), [setGroupTargets])
 
   const updateTarget = useCallback((catId, value) => {
     setTargets(prev => { const next = { ...prev, [catId]: parseFloat(value) || 0 }; persistState(holdings, next, fxRate, accounts, reviews); return next })
@@ -353,6 +386,6 @@ export function usePortfolio() {
     priceStatus, priceErrors, lastUpdated, syncStatus,
     holdingValue, holdingCost, categoryTotals, regionTotals,
     addHolding, updateHolding, removeHolding, toggleTag,
-    updateTarget, manualRefresh, ready,
+    updateTarget, splitGroupEvenly, normalizeGroup, manualRefresh, ready,
   }
 }

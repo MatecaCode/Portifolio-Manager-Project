@@ -32,20 +32,27 @@ C:\Documents\GitHub\Portifolio Repo\
 ```
 
 ### 2. Create `.env.local`
-Create this file at the project root (never commit it):
-```env
-VITE_SUPABASE_URL=https://zyfmuddelxryvoxnqpxl.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_paTKkcM87OiifxVV9aDEkw_y9gU1d8M
-VITE_FINNHUB_KEY=d7qc6cpr01qi8jamteigd7qc6cpr01qi8jamtej0
-VITE_BRAPI_KEY=aPfC5vimk9AT91jszEnq1E
-```
+Copy `.env.example` to `.env.local` and fill in the real values from each
+provider's dashboard. **Never commit it** — `*.local` is gitignored.
+
+Real keys do not belong in this file, in `.env.example`, or anywhere else in
+the repo: this repository is public. See `SECURITY.md`.
 
 ### 3. Run Supabase setup SQL
-1. Go to https://supabase.com → Portfolio Manager Project (`zyfmuddelxryvoxnqpxl`)
+1. Go to https://supabase.com → your project
 2. Open **SQL Editor → New query**
 3. Paste and run the entire contents of `supabase_setup.sql`
 
-This creates the `portfolio_state` table with RLS enabled and seeds the single shared row.
+This creates the tables with RLS enabled, restricted to signed-in users, and
+seeds the single shared row.
+
+### 3b. Create the sign-in accounts
+The app is gated behind Supabase Auth. In the dashboard:
+- **Authentication → Users → Add user** — create one account for each of you
+- **Authentication → Providers → Email** — turn **off** public sign-ups
+
+Skipping the second step defeats the first: anyone could register themselves
+into the `authenticated` role and reach the shared data.
 
 ### 4. Install and run locally
 ```bash
@@ -288,15 +295,21 @@ A currency other than USD/BRL also needs an FX rate — `toUSD()` in
 
 ## Environment Variables Summary
 
-| Variable | Value | Used in |
+| Variable | Where to get it | Used in |
 |---|---|---|
-| `VITE_SUPABASE_URL` | `https://zyfmuddelxryvoxnqpxl.supabase.co` | `src/lib/supabase.js` |
-| `VITE_SUPABASE_ANON_KEY` | `sb_publishable_paTKkcM87OiifxVV9aDEkw_y9gU1d8M` | `src/lib/supabase.js` |
-| `VITE_FINNHUB_KEY` | `d7qc6cpr01qi8jamteigd7qc6cpr01qi8jamtej0` | `src/lib/prices.js` |
-| `VITE_BRAPI_KEY` | `aPfC5vimk9AT91jszEnq1E` | `src/lib/prices.js` |
+| `VITE_SUPABASE_URL` | Supabase → Settings → API | `src/lib/supabase.js` |
+| `VITE_SUPABASE_ANON_KEY` | Supabase → Settings → API (anon, **not** service_role) | `src/lib/supabase.js` |
+| `VITE_FINNHUB_KEY` | finnhub.io/dashboard | `src/lib/prices.js` |
+| `VITE_BRAPI_KEY` | brapi.dev | `src/lib/prices.js` |
 
 All prefixed with `VITE_` so Vite exposes them to the browser via `import.meta.env`.  
-Add these same 4 vars in Vercel dashboard before deploying.
+Add these same 4 vars in the Vercel dashboard before deploying.
+
+⚠️ **`VITE_` means public.** Every one of these is compiled into the JS bundle
+that ships to browsers — anyone can read them in devtools. That's expected for
+the Supabase anon key (RLS is the actual protection) but it means the price-API
+keys can't be kept secret in a client-side app. Values live only in `.env.local`
+and in Vercel's environment settings — never in the repo. See `SECURITY.md`.
 
 ---
 

@@ -7,8 +7,10 @@ import Rebalance from './components/Rebalance'
 import Review from './components/Review'
 import Import from './components/Import'
 import Budget from './components/Budget'
+import Login from './components/Login'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useBudget } from './hooks/useBudget'
+import { useAuth } from './hooks/useAuth'
 import { isCashAccount } from './lib/statements'
 
 const TABS = [
@@ -20,7 +22,25 @@ const TABS = [
   { id: 'import',    label: 'Import'    },
 ]
 
+function Splash({ children }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', color:'var(--muted)', fontFamily:'var(--font-mono)', fontSize:13 }}>
+      {children}
+    </div>
+  )
+}
+
+// The gate lives above Dashboard rather than inside it so the portfolio and
+// budget hooks — which start fetching from Supabase the moment they mount —
+// never run for a signed-out visitor.
 export default function App() {
+  const auth = useAuth()
+  if (auth.checking) return <Splash>Checking sign-in…</Splash>
+  if (auth.required && !auth.session) return <Login signIn={auth.signIn} />
+  return <Dashboard onSignOut={auth.required ? auth.signOut : null} />
+}
+
+function Dashboard({ onSignOut }) {
   const [tab, setTab] = useState(() => {
     const saved = localStorage.getItem('sg_tab')
     return TABS.some(t => t.id === saved) ? saved : 'overview'
@@ -61,13 +81,7 @@ export default function App() {
     setTab('holdings')
   }
 
-  if (!p.ready) {
-    return (
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', color:'var(--muted)', fontFamily:'var(--font-mono)', fontSize:13 }}>
-        Loading portfolio…
-      </div>
-    )
-  }
+  if (!p.ready) return <Splash>Loading portfolio…</Splash>
 
   return (
     <div className="app">
@@ -78,6 +92,7 @@ export default function App() {
         onRefresh={p.manualRefresh}
         mode={mode}
         setMode={setMode}
+        onSignOut={onSignOut}
       />
       {mode === 'budget' ? (
         <main>
@@ -100,7 +115,7 @@ export default function App() {
             {tab === 'overview'  && <Overview  holdings={p.holdings} categoryTotals={p.categoryTotals} regionTotals={p.regionTotals} holdingValue={p.holdingValue} holdingCost={p.holdingCost} fxRate={p.fxRate} setFxRate={p.updateFxRate} onCategoryClick={goToCategory} accounts={p.accounts} derivedAccounts={derivedCash} addAccount={p.addAccount} updateAccount={p.updateAccount} removeAccount={p.removeAccount} onManageBudget={() => setMode('budget')} />}
             {tab === 'growth'    && <Growth    holdings={p.holdings} categoryTotals={p.categoryTotals} holdingCost={p.holdingCost} accounts={[...p.accounts, ...derivedCash]} />}
             {tab === 'holdings'  && <Holdings  holdings={p.holdings} addHolding={p.addHolding} updateHolding={p.updateHolding} removeHolding={p.removeHolding} toggleTag={p.toggleTag} holdingValue={p.holdingValue} holdingCost={p.holdingCost} priceErrors={p.priceErrors} focusCategory={focusCat} onFocusHandled={() => setFocusCat(null)} />}
-            {tab === 'rebalance' && <Rebalance holdings={p.holdings} targets={p.targets} categoryTotals={p.categoryTotals} updateTarget={p.updateTarget} holdingValue={p.holdingValue} />}
+            {tab === 'rebalance' && <Rebalance holdings={p.holdings} targets={p.targets} categoryTotals={p.categoryTotals} updateTarget={p.updateTarget} updateHolding={p.updateHolding} splitGroupEvenly={p.splitGroupEvenly} normalizeGroup={p.normalizeGroup} holdingValue={p.holdingValue} />}
             {tab === 'review'    && <Review reviews={p.reviews} addReview={p.addReview} updateReview={p.updateReview} rejectReview={p.rejectReview} approveReview={p.approveReview} />}
             {tab === 'import'    && <Import holdings={p.holdings} reviews={p.reviews} trades={p.trades} importTrades={p.importTrades} />}
           </main>

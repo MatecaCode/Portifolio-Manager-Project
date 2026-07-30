@@ -61,6 +61,39 @@ main { display: block; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
 
+/* ---------- sign-in gate ---------- */
+.login-screen {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.login-card { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; }
+.login-brand { display: flex; align-items: center; gap: 12px; }
+.login-intro { font-size: 13.5px; color: var(--muted); }
+.login-field { display: flex; flex-direction: column; gap: 5px; }
+.login-label { font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.login-input {
+  border: 1px solid var(--line); border-radius: 11px;
+  padding: 10px 12px; font-size: 14px;
+  background: var(--bg); color: var(--ink);
+  width: 100%;
+}
+.login-input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.login-error {
+  font-size: 12.5px; font-weight: 600;
+  color: var(--warn-ink); background: var(--warn-bg);
+  border-radius: 10px; padding: 9px 12px;
+}
+.login-btn {
+  border: none; border-radius: 999px;
+  background: var(--accent); color: #fff;
+  padding: 11px 18px; font-size: 14.5px; font-weight: 600;
+  transition: all 0.15s ease;
+}
+.login-btn:hover:not(:disabled) { background: var(--accent-deep); }
+.login-btn:disabled { opacity: 0.55; cursor: default; }
+.login-foot { font-size: 11.5px; color: var(--muted); text-align: center; }
+
 /* ---------- top bar ---------- */
 .topbar { display: flex; align-items: center; justify-content: space-between; padding: 6px 0 18px; }
 .brand { display: flex; align-items: center; gap: 12px; }
@@ -220,6 +253,7 @@ main { display: block; }
 .region-badge:hover .term-tip, .region-badge:focus .term-tip {
   opacity: 1; transform: translateX(-50%) translateY(0);
 }
+.region-sm { font-size: 8.5px; padding: 1px 4px; }
 .region-select {
   flex-shrink: 0;
   font-family: var(--font-mono);
@@ -555,6 +589,49 @@ main { display: block; }
 .rs-label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
 .rs-val { font-size: 13.5px; font-weight: 600; margin-top: 1px; }
 
+/* rebalance — layer 2: the split inside a group */
+.reb-intro-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.reb-card-open { grid-column: 1 / -1; }
+.reb-inner { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.reb-inner-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: 0; padding: 2px 0; cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--muted);
+}
+.reb-inner-toggle:hover { color: var(--accent-deep); }
+.reb-caret { font-size: 10px; width: 10px; }
+.reb-inner-empty { margin-top: 10px; }
+.reb-h-table { margin-top: 12px; display: flex; flex-direction: column; }
+.reb-h-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 108px 84px 84px 104px;
+  align-items: center; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.reb-h-row:last-of-type { border-bottom: 0; }
+.reb-h-head {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--muted);
+}
+.reb-h-num { text-align: right; }
+.reb-h-id { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.reb-h-tick { font-weight: 700; font-size: 12.5px; }
+.reb-h-name { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reb-h-flag {
+  font-size: 10.5px; font-style: italic; color: var(--muted);
+  white-space: nowrap; opacity: 0.85;
+}
+.reb-h-num .reb-input { width: 58px; }
+.soft-val { color: var(--muted); }
+.reb-h-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.reb-h-foot .btn-soft { padding: 5px 12px; font-size: 12.5px; }
+.reb-h-foot .btn-soft:disabled { opacity: 0.4; cursor: default; }
+.reb-h-foot .btn-soft:disabled:hover { border-color: var(--line); color: var(--ink); background: var(--surface); }
+/* An open card goes full-bleed for the table; keep its own stats readable
+   instead of stretching four numbers across the whole row. */
+.reb-card-open .reb-stats { max-width: 520px; }
+
 /* ---------- import ---------- */
 .import-hero { max-width: 620px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 6px; }
 .import-hero h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
@@ -835,6 +912,18 @@ body[data-mode="budget"] .brand-sun { background: #FFF3D6; }
   .hold-row.editing { grid-template-columns: 1fr 70px 90px 90px 100px 90px 24px; }
   .cf-stat-row { grid-template-columns: 1fr 1fr; }
   .cf-bars { gap: 4px; }
+}
+
+/* Phones: rebalance cards go single-column so an opened group has room for its
+   per-holding table. Must sit after the 980px block to win the cascade. */
+@media (max-width: 760px) {
+  .reb-grid { grid-template-columns: 1fr; }
+  /* Drop "Of total" — it's the group target times the row target, and
+     Target / Actual / Buy are what you act on with a phone in your hand. */
+  .reb-h-row { grid-template-columns: minmax(84px, 1fr) 86px 62px 88px; gap: 8px; }
+  .reb-h-row > :nth-child(4) { display: none; }
+  .reb-h-name, .reb-h-flag { display: none; }
+  .reb-h-num .reb-input { width: 48px; }
 }
 
 /* ---------- cashflow view ---------- */

@@ -1,12 +1,115 @@
+import { useState } from 'react';
 import { CATEGORIES } from '../data/portfolio';
-import { Card, CatDot, Chip, ProgressBar, SectionLabel, Term } from './ui';
+import { Card, CatDot, Chip, ProgressBar, RegionBadge, SectionLabel, Term } from './ui';
 import { fmt0 } from '../lib/format';
 
-export default function Rebalance({ targets, categoryTotals, updateTarget }) {
+const pctOf = h => parseFloat(h.targetPct) || 0;
+const sumTargets = items => items.reduce((a, h) => a + pctOf(h), 0);
+const groupOk = (items, sum) => items.length === 0 || Math.abs(sum - 100) < 0.1;
+
+// ── Layer 2: how one group is split between its own investments ──────────
+// The group owns a % of the whole portfolio; these targets say how that slice
+// is divided inside it. A 20% group split 60/40 means 12% and 8% of the total.
+function GroupSplit({ cat, items, groupTarget, groupValue, totalVal, holdingValue, updateHolding, splitGroupEvenly, normalizeGroup, open, onToggle }) {
+  const sum = sumTargets(items);
+  const ok = groupOk(items, sum);
+  // What this group *should* be worth once the top-layer target is hit — the
+  // per-holding buy/trim numbers are measured against that, not today's value,
+  // so the two layers point the same direction instead of fighting each other.
+  const targetGroupValue = (groupTarget / 100) * totalVal;
+
+  return (
+    <div className="reb-inner">
+      <button type="button" className="reb-inner-toggle" onClick={onToggle}
+        title="Set how this group is divided between the investments inside it">
+        <span className="reb-caret">{open ? '▾' : '▸'}</span>
+        <span>Inside this group</span>
+        <Chip tone={items.length === 0 ? 'soft' : ok ? 'up' : 'warn'}>
+          {items.length === 0 ? 'empty' : `${sum.toFixed(1)}%`}
+        </Chip>
+      </button>
+
+      {open && (items.length === 0 ? (
+        <p className="reb-tip reb-inner-empty">Nothing in this group yet — add investments on the Holdings tab first.</p>
+      ) : (
+        <div className="reb-h-table">
+          <div className="reb-h-row reb-h-head">
+            <span>Investment</span>
+            <span className="reb-h-num">
+              <Term tip="This investment's share of its own group. All the rows here should add up to 100%.">Target</Term>
+            </span>
+            <span className="reb-h-num">
+              <Term tip="What it is today, as a share of what the group is worth right now.">Actual</Term>
+            </span>
+            <span className="reb-h-num">
+              <Term tip="Share of the whole portfolio: the group's target multiplied by this row's target.">Of total</Term>
+            </span>
+            <span className="reb-h-num">
+              <Term tip="How much to add (or trim) to reach this target, once the group itself is at its own target.">Buy / trim</Term>
+            </span>
+          </div>
+
+          {items.map(h => {
+            const value = holdingValue(h);
+            const target = pctOf(h);
+            const actual = groupValue > 0 ? (value / groupValue) * 100 : 0;
+            const ofTotal = (groupTarget * target) / 100;
+            const needed = (targetGroupValue * target) / 100 - value;
+            return (
+              <div className="reb-h-row" key={h.id}>
+                <span className="reb-h-id">
+                  <span className="reb-h-tick mono">{h.ticker || '—'}</span>
+                  {/* a group can hold reais and dollars at once now, and every
+                      figure in this table is USD — the sticker says which rows
+                      were converted to get there */}
+                  <RegionBadge region={h.region} size="sm" />
+                  <span className="reb-h-name">{h.name}</span>
+                  {(h.shares || 0) <= 0 && <span className="reb-h-flag">not bought yet</span>}
+                </span>
+                <span className="reb-h-num">
+                  <input type="number" className="reb-input mono" min="0" max="100" step="0.5"
+                    value={h.targetPct ?? 0}
+                    onChange={e => updateHolding(h.id, 'targetPct', e.target.value)} /> %
+                </span>
+                <span className="reb-h-num mono">{actual.toFixed(1)}%</span>
+                <span className="reb-h-num mono soft-val">{ofTotal.toFixed(1)}%</span>
+                <span className={'reb-h-num mono ' + (needed >= 0 ? 'up' : 'down')}>{fmt0(needed)}</span>
+              </div>
+            );
+          })}
+
+          <div className="reb-h-foot">
+            <Chip tone={ok ? 'up' : 'warn'} title="The investments inside a group should add up to exactly 100% of that group.">
+              {ok ? '✓' : '…'} {sum.toFixed(1)}% of {cat.name}
+            </Chip>
+            <span className="rev-spacer" />
+            <button type="button" className="btn-soft" onClick={() => splitGroupEvenly(cat.id)}
+              title="Give every investment in this group the same weight">
+              Split evenly
+            </button>
+            <button type="button" className="btn-soft" disabled={sum <= 0} onClick={() => normalizeGroup(cat.id)}
+              title="Keep the weights you typed but scale them so they add up to 100%">
+              Scale to 100%
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function Rebalance({ holdings, targets, categoryTotals, updateTarget, updateHolding, splitGroupEvenly, normalizeGroup, holdingValue }) {
+  const [openCat, setOpenCat] = useState(null);
   const totals = categoryTotals();
   const totalVal = Object.values(totals).reduce((a, t) => a + t.value, 0);
   const targetSum = Object.values(targets).reduce((a, b) => a + (parseFloat(b) || 0), 0);
   const sumOk = Math.abs(targetSum - 100) < 0.1;
+
+  const membersOf = catId => holdings.filter(h => h.category === catId);
+  const needsSplit = CATEGORIES.filter(c => {
+    const items = membersOf(c.id);
+    return !groupOk(items, sumTargets(items));
+  });
 
   // Written advice: biggest gaps first, ignore gaps under 1 percentage point
   const advice = CATEGORIES.map(cat => {
@@ -21,12 +124,21 @@ export default function Rebalance({ targets, categoryTotals, updateTarget }) {
     <div className="screen">
       <div className="reb-intro">
         <p>
-          Set your target % per category. The filled bar is where you <b>are</b>; the little line is where you <b>want to be</b>.
+          Two layers. First set the target % for each <b>group</b> — those add up to 100% of the portfolio.
+          Then open a group to split it between the <b>investments</b> inside it — those add up to 100% of that group.
           {' '}<Term tip="Rebalancing nudges your money back to the mix you chose — usually by directing new deposits to whatever is underweight.">Why rebalance?</Term>
         </p>
-        <Chip tone={sumOk ? 'up' : 'warn'} title="Your targets should add up to exactly 100% of the portfolio.">
-          {sumOk ? '✓' : '…'} Targets: {targetSum.toFixed(1)}%
-        </Chip>
+        <div className="reb-intro-chips">
+          <Chip tone={sumOk ? 'up' : 'warn'} title="Your group targets should add up to exactly 100% of the portfolio.">
+            {sumOk ? '✓' : '…'} Groups: {targetSum.toFixed(1)}%
+          </Chip>
+          <Chip tone={needsSplit.length === 0 ? 'up' : 'warn'}
+            title={needsSplit.length === 0
+              ? 'Every group is split to exactly 100% between its own investments.'
+              : `These groups don't add up to 100% inside yet: ${needsSplit.map(c => c.name).join(', ')}`}>
+            {needsSplit.length === 0 ? '✓ Splits set' : `… ${needsSplit.length} group${needsSplit.length > 1 ? 's' : ''} to split`}
+          </Chip>
+        </div>
       </div>
 
       <Card>
@@ -62,7 +174,7 @@ export default function Rebalance({ targets, categoryTotals, updateTarget }) {
                     <CatDot color={cat.color} size={11} />
                     <p>
                       {needed > 0
-                        ? <><b>Add about <span className="mono">{fmt0(needed)}</span> to {cat.name}</b> — {actual.toFixed(1)}% of the portfolio, target is {target}%.</>
+                        ? <><b>Add about <span className="mono">{fmt0(needed)}</span> to {cat.name}</b> — {actual.toFixed(1)}% of the portfolio, target is {target}%. Open the group below to see which names that money should go to.</>
                         : <><b>{cat.name} is overweight</b> — {actual.toFixed(1)}% of the portfolio vs a {target}% target. Either trim about <b className="mono">{fmt0(Math.abs(needed))}</b>, or simply direct new money to the other categories until it evens out.</>}
                     </p>
                   </div>
@@ -83,9 +195,11 @@ export default function Rebalance({ targets, categoryTotals, updateTarget }) {
           const diff = actual - target;
           const value = totals[cat.id].value;
           const needed = totalVal > 0 ? (target / 100 * totalVal) - value : 0;
+          const items = membersOf(cat.id);
+          const isOpen = openCat === cat.id;
 
           return (
-            <Card className="reb-card" key={cat.id}>
+            <Card className={'reb-card' + (isOpen ? ' reb-card-open' : '')} key={cat.id}>
               <div className="reb-card-head">
                 <CatDot color={cat.color} size={10} />
                 <span className="reb-card-name"><Term tip={cat.blurb}>{cat.name}</Term></span>
@@ -109,6 +223,20 @@ export default function Rebalance({ targets, categoryTotals, updateTarget }) {
                   <div className={'rs-val mono ' + (needed >= 0 ? 'up' : 'down')}>{fmt0(Math.abs(needed))}</div>
                 </div>
               </div>
+
+              <GroupSplit
+                cat={cat}
+                items={items}
+                groupTarget={target}
+                groupValue={value}
+                totalVal={totalVal}
+                holdingValue={holdingValue}
+                updateHolding={updateHolding}
+                splitGroupEvenly={splitGroupEvenly}
+                normalizeGroup={normalizeGroup}
+                open={isOpen}
+                onToggle={() => setOpenCat(isOpen ? null : cat.id)}
+              />
             </Card>
           );
         })}

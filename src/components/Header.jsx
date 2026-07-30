@@ -5,7 +5,7 @@ const MODES = [
   { id: 'budget',    label: '💸 Budget'    },
 ]
 
-export default function Header({ priceStatus, syncStatus, lastUpdated, onRefresh, mode, setMode }) {
+export default function Header({ priceStatus, syncStatus, lastUpdated, onRefresh, mode, setMode, onSignOut }) {
   const timeStr = lastUpdated ? lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null
 
   const priceLabel = {
@@ -49,6 +49,12 @@ export default function Header({ priceStatus, syncStatus, lastUpdated, onRefresh
           <button className="chip chip-up chip-btn" onClick={onRefresh}
             title="Prices update automatically every 5 minutes. Click any time to refresh them now.">
             {priceLabel}
+          </button>
+        )}
+        {onSignOut && (
+          <button className="chip chip-soft chip-btn" onClick={onSignOut}
+            title="Sign out of the shared account on this device.">
+            Sign out
           </button>
         )}
       </div>
