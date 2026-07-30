@@ -22,7 +22,10 @@ export function usePortfolio() {
   const [targets, setTargets]         = useState(DEFAULT_TARGETS)
   const [fxRate, setFxRate]           = useState(5.70)
   const [priceStatus, setPriceStatus] = useState('idle')
-  const [priceErrors, setPriceErrors] = useState({})
+  const [priceErrors, setPriceErrors] = useState([])
+  // ticker -> { source, at } for quotes that actually arrived this session
+  const [priceMeta, setPriceMeta]     = useState({})
+  const [priceCoverage, setPriceCoverage] = useState({ live: 0, total: 0 })
   const [lastUpdated, setLastUpdated] = useState(null)
   const [syncStatus, setSyncStatus]   = useState('local') // local | synced | syncing | error
   const [ready, setReady]             = useState(false)
@@ -100,8 +103,16 @@ export function usePortfolio() {
   const refreshPrices = useCallback(async (currentHoldings) => {
     if (!currentHoldings?.length) return
     setPriceStatus('loading')
-    const { prices, errors } = await fetchAllPrices(currentHoldings)
+    const { prices, errors, requested, missing } = await fetchAllPrices(currentHoldings)
     setPriceErrors(errors)
+
+    // Which tickers actually came back live, and from where. The Holdings LIVE
+    // badge reads this instead of assuming "crypto = live", which was wrong for
+    // every US stock even when Finnhub was working perfectly.
+    const meta = {}
+    Object.entries(prices).forEach(([t, p]) => { meta[t] = { source: p.source, at: Date.now() } })
+    setPriceMeta(prev => ({ ...prev, ...meta }))
+
     if (Object.keys(prices).length === 0) { setPriceStatus('error'); return }
 
     setHoldings(prev => {
@@ -112,8 +123,11 @@ export function usePortfolio() {
       persistState(updated, targets, fxRate, accounts, reviews)
       return updated
     })
-    setPriceStatus('live')
+    // Partial is its own state: crypto needs no key, so a dead Finnhub key used
+    // to still report "Prices live" while every stock quietly went stale.
+    setPriceStatus(missing?.length ? 'partial' : 'live')
     setLastUpdated(new Date())
+    setPriceCoverage({ live: requested.length - (missing?.length || 0), total: requested.length })
   }, [targets, fxRate, accounts, reviews, persistState])
 
   // Auto refresh every 60s
@@ -360,7 +374,7 @@ export function usePortfolio() {
     importedLots, applyTradeImport,
     accounts, addAccount, updateAccount, removeAccount,
     reviews, addReview, updateReview, rejectReview, approveReview,
-    priceStatus, priceErrors, lastUpdated, syncStatus,
+    priceStatus, priceErrors, priceMeta, priceCoverage, lastUpdated, syncStatus,
     holdingValue, holdingCost, categoryTotals,
     addHolding, updateHolding, removeHolding, toggleTag,
     updateTarget, splitGroupEvenly, normalizeGroup, manualRefresh, ready,
