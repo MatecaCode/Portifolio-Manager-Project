@@ -601,13 +601,25 @@ main { display: block; }
 .dropzone p { font-size: 13.5px; color: var(--muted); max-width: 480px; margin: 0 auto; }
 
 /* ---------- import: live upload + preview ---------- */
-.dropzone { transition: border-color 0.15s ease, background 0.15s ease; }
+.dropzone {
+  display: block; width: 100%; font: inherit; color: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.dropzone:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
 .dropzone.dragging { border-color: var(--accent); background: var(--accent-soft); }
-.dropzone .btn-soft { margin-top: 14px; }
+.dropzone:disabled { cursor: progress; }
+.dz-btn { display: inline-block; margin-top: 14px; }
 .dz-input { display: none; }
 .dz-file { margin-top: 10px; font-size: 12.5px; color: var(--accent-deep); }
 
-.import-card.import-live { border-color: var(--accent-soft); background: var(--accent-faint); }
+/* Only a source that actually does something gets the clickable affordance. */
+.import-card.import-live {
+  border-color: var(--accent-soft); background: var(--accent-faint);
+  display: block; width: 100%; text-align: left; font: inherit; color: inherit;
+}
+.import-card.import-soon { cursor: default; opacity: 0.72; }
+.import-card.import-soon:hover { transform: none; box-shadow: var(--shadow); }
+.import-cta { display: inline-block; margin-top: 10px; font-size: 12.5px; font-weight: 600; color: var(--accent-deep); }
 .import-name .chip { margin-left: 6px; vertical-align: 2px; }
 
 .import-error { border-color: color-mix(in oklch, var(--down) 45%, var(--line)); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }

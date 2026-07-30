@@ -58,6 +58,15 @@ export default function Import({ holdings = [], reviews = [], importedLots = [],
     handleFile(e.dataTransfer?.files?.[0]);
   };
 
+  // Accept a drop anywhere on the tab, not just inside the dashed box — people
+  // aim at the source card they recognise, or just at the page.
+  const pageDrag = {
+    onDragOver: e => { e.preventDefault(); setDragging(true); },
+    onDragLeave: e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); },
+    onDrop,
+  };
+  const pickFile = () => inputRef.current?.click();
+
   const reset = () => { setFile(null); setParsed(null); setError(null); setResult(null); if (inputRef.current) inputRef.current.value = ''; };
 
   const apply = () => {
@@ -69,34 +78,30 @@ export default function Import({ holdings = [], reviews = [], importedLots = [],
   };
 
   return (
-    <div className="screen">
+    <div className="screen" {...pageDrag}>
       <div className="import-hero">
         <h2>Import from a file</h2>
         <p>
-          Drop a broker report here and you'll see exactly what would change —
-          nothing is saved until you confirm.
+          Drop a broker report anywhere on this page and you'll see exactly what
+          would change — nothing is saved until you confirm.
         </p>
       </div>
 
+      {/* The file input lives outside the dropzone so the source cards below
+          can trigger it too. */}
+      <input ref={inputRef} type="file" accept=".pdf,application/pdf" className="dz-input"
+        onChange={e => handleFile(e.target.files?.[0])} />
+
       {/* ── Dropzone ── */}
-      <div
-        className={'dropzone' + (dragging ? ' dragging' : '')}
-        onDragOver={e => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-      >
-        <input ref={inputRef} type="file" accept=".pdf,application/pdf" className="dz-input"
-          onChange={e => handleFile(e.target.files?.[0])} />
+      <button type="button" className={'dropzone' + (dragging ? ' dragging' : '')}
+        onClick={pickFile} disabled={busy}>
         <div className="dropzone-title">{busy ? 'Reading your report…' : 'Drop your IBKR report here'}</div>
         <p>
           Interactive Brokers → <b>Performance &amp; Reports</b> → Trade Confirmations → download as <b>PDF</b>.
         </p>
-        <button type="button" className="btn-soft" disabled={busy}
-          onClick={() => inputRef.current?.click()}>
-          {busy ? 'Reading…' : 'Choose a file'}
-        </button>
+        <span className="btn-soft dz-btn">{busy ? 'Reading…' : 'Choose a file'}</span>
         {file && !busy && <p className="dz-file mono">{file.name}</p>}
-      </div>
+      </button>
 
       {error && (
         <Card className="import-error">
@@ -199,17 +204,28 @@ export default function Import({ holdings = [], reviews = [], importedLots = [],
         </Card>
       )}
 
-      {/* ── Sources ── */}
+      {/* ── Sources ──
+          A live source is a real button that opens the picker, because a card
+          that lifts on hover reads as clickable and has to actually be
+          clickable. The ones that aren't wired up yet are inert <div>s so they
+          don't make the same promise. */}
       <SectionLabel>Where you can import from</SectionLabel>
       <div className="import-grid">
-        {SOURCES.map(s => (
-          <Card className={'import-card' + (s.live ? ' import-live' : '')} key={s.id}>
+        {SOURCES.map(s => s.live ? (
+          <button type="button" className="card import-card import-live" key={s.id}
+            onClick={pickFile} disabled={busy}
+            title="Choose an Interactive Brokers PDF to import">
             <div className="import-icon">{s.icon}</div>
-            <div className="import-name">
-              {s.name} {s.live ? <Chip tone="up">LIVE</Chip> : <Chip tone="soft">soon</Chip>}
-            </div>
+            <div className="import-name">{s.name} <Chip tone="up">LIVE</Chip></div>
             <p className="import-note">{s.detail}</p>
-          </Card>
+            <span className="import-cta">Choose a file →</span>
+          </button>
+        ) : (
+          <div className="card import-card import-soon" key={s.id}>
+            <div className="import-icon">{s.icon}</div>
+            <div className="import-name">{s.name} <Chip tone="soft">soon</Chip></div>
+            <p className="import-note">{s.detail}</p>
+          </div>
         ))}
       </div>
     </div>
