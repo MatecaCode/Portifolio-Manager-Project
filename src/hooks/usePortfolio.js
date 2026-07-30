@@ -16,6 +16,9 @@ export function usePortfolio() {
   const [holdings, setHoldings]       = useState([])
   const [accounts, setAccounts]       = useState(CASH_ACCOUNTS)
   const [reviews, setReviews]         = useState(SEED_REVIEWS)
+  // Ledger of broker trades already applied, so re-importing a statement can't
+  // silently double a position. See planIbkrImport() for the matching rules.
+  const [importedLots, setImportedLots] = useState([])
   const [targets, setTargets]         = useState(DEFAULT_TARGETS)
   const [fxRate, setFxRate]           = useState(5.70)
   const [priceStatus, setPriceStatus] = useState('idle')
@@ -47,6 +50,7 @@ export function usePortfolio() {
             // and there's no local copy either.
             if (Array.isArray(data.reviews)) setReviews(data.reviews)
             else setReviews(lsLoad()?.reviews ?? SEED_REVIEWS)
+            setImportedLots(Array.isArray(data.imported_lots) ? data.imported_lots : (lsLoad()?.importedLots ?? []))
             setSyncStatus('synced')
             setReady(true)
             return
@@ -60,6 +64,7 @@ export function usePortfolio() {
       setTargets(saved?.targets || DEFAULT_TARGETS)
       setFxRate(saved?.fxRate || 5.70)
       setReviews(saved?.reviews ?? SEED_REVIEWS)
+      setImportedLots(saved?.importedLots ?? [])
       setSyncStatus('local')
       setReady(true)
     }
@@ -67,26 +72,29 @@ export function usePortfolio() {
   }, [])
 
   // ── Save debounced ──
-  const persistState = useCallback((h, t, fx, acc, rev) => {
-    lsSave({ holdings: h, targets: t, fxRate: fx, accounts: acc, reviews: rev })
+  const persistState = useCallback((h, t, fx, acc, rev, lots = importedLots) => {
+    lsSave({ holdings: h, targets: t, fxRate: fx, accounts: acc, reviews: rev, importedLots: lots })
     if (!supabase) return
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
       setSyncStatus('syncing')
       try {
-        const row = { id: 'shared', holdings: h, targets: t, fx_rate: fx, accounts: acc, reviews: rev, updated_at: new Date().toISOString() }
+        const row = { id: 'shared', holdings: h, targets: t, fx_rate: fx, accounts: acc, reviews: rev, imported_lots: lots, updated_at: new Date().toISOString() }
         let { error } = await supabase.from('portfolio_state').upsert(row)
-        // Self-heal: if the `reviews` column hasn't been added yet, save
-        // everything else (reviews stay in localStorage) instead of failing
-        // the whole write. Cloud sync of reviews begins once the column exists.
-        if (error && /review/i.test(error.message || '')) {
-          const { reviews, ...rest } = row
+        // Self-heal: if the `reviews` / `imported_lots` columns haven't been
+        // added yet, save everything else (those stay in localStorage) instead
+        // of failing the whole write. Cloud sync starts once they exist —
+        // supabase_setup.sql adds them.
+        if (error && /review|imported_lots/i.test(error.message || '')) {
+          const rest = { ...row }
+          delete rest.reviews
+          delete rest.imported_lots
           ;({ error } = await supabase.from('portfolio_state').upsert(rest))
         }
         setSyncStatus(error ? 'error' : 'synced')
       } catch { setSyncStatus('error') }
     }, 800)
-  }, [])
+  }, [importedLots])
 
   // ── Price refresh ──
   const refreshPrices = useCallback(async (currentHoldings) => {
@@ -289,8 +297,67 @@ export function usePortfolio() {
     persistState(nextHoldings, targets, fxRate, accounts, nextReviews)
   }, [holdings, reviews, targets, fxRate, accounts, persistState])
 
+  // ── Broker trade import ──
+  // Apply a plan from planIbkrImport(). Buys blend into the existing average
+  // cost by quantity; a sell reduces the position and leaves average cost alone
+  // (the standard treatment — cost basis per share doesn't change when you sell
+  // some). Duplicates are dropped, every applied row is recorded in
+  // importedLots so the same statement can't land twice, and anything you've
+  // actually bought stops being a Review candidate. One atomic save.
+  const applyTradeImport = useCallback(plan => {
+    const rows = (plan || []).filter(r => r.status !== 'duplicate' && Math.abs(r.netQty) > 1e-8)
+    if (!rows.length) return { applied: 0, created: 0, clearedFromReview: 0 }
+
+    const next = [...holdings]
+    const lots = []
+    const bought = new Set()
+    let created = 0
+
+    for (const r of rows) {
+      bought.add(r.symbol)
+      const i = next.findIndex(h => (h.ticker || '').toUpperCase() === r.symbol)
+      if (i === -1) {
+        created++
+        next.push({
+          id: uid(), category: r.category, ticker: r.symbol, name: r.name,
+          shares: r.netQty, cost: r.unitCost, price: r.price,
+          targetPct: r.targetPct ?? 0, finclass: false, energy: false,
+          thesis: r.thesis || '', theme: r.theme || '',
+        })
+      } else {
+        const h = next[i]
+        const prevShares = h.shares || 0
+        const shares = Math.max(0, prevShares + r.netQty)
+        const cost = r.netQty > 0 && shares > 0
+          ? ((prevShares * (h.cost || 0)) + (r.netQty * r.unitCost)) / shares
+          : (h.cost || 0)
+        // A watchlist entry (no shares yet) may be carrying a hand-typed
+        // placeholder price from the seed data, which would show an absurd P/L
+        // until the next price refresh. The execution price is certainly
+        // fresher. Once shares are actually held, leave the live price alone.
+        const price = prevShares > 0 ? (h.price || r.price) : r.price
+        next[i] = { ...h, shares, cost, price }
+      }
+      lots.push({
+        key: r.key, source: 'ibkr', symbol: r.symbol,
+        shares: r.netQty, unitCost: r.unitCost, at: new Date().toISOString(),
+      })
+    }
+
+    const nextReviews = reviews.filter(r => !bought.has((r.ticker || '').toUpperCase()))
+    const nextLots = [...importedLots, ...lots]
+
+    setHoldings(next)
+    setReviews(nextReviews)
+    setImportedLots(nextLots)
+    persistState(next, targets, fxRate, accounts, nextReviews, nextLots)
+
+    return { applied: rows.length, created, clearedFromReview: reviews.length - nextReviews.length }
+  }, [holdings, reviews, importedLots, targets, fxRate, accounts, persistState])
+
   return {
     holdings, targets, fxRate, updateFxRate,
+    importedLots, applyTradeImport,
     accounts, addAccount, updateAccount, removeAccount,
     reviews, addReview, updateReview, rejectReview, approveReview,
     priceStatus, priceErrors, lastUpdated, syncStatus,
