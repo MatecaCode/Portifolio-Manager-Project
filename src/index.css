@@ -24,6 +24,7 @@
   --cat-rf: #8FAE9B;
   --cat-us: #6FA8C9;
   --cat-intl: #E5B45E;
+  --cat-savings: #BFA48C;
   --shadow: 0 1px 2px rgba(31,58,56,0.04), 0 4px 16px rgba(31,58,56,0.05);
 }
 
@@ -668,6 +669,17 @@ main { display: block; }
 .imp-foot .btn-soft:disabled { opacity: 0.45; cursor: default; }
 .imp-foot .btn-soft:disabled:hover { border-color: var(--line); color: var(--ink); background: var(--surface); }
 .imp-note { margin-top: 12px; }
+
+/* Cash vs savings toggle on an account card */
+.acct-bucket { display: inline-flex; gap: 3px; padding: 3px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; margin-top: 8px; }
+.acct-bucket-btn {
+  border: none; background: transparent; color: var(--muted);
+  border-radius: 999px; padding: 3px 12px;
+  font-size: 11.5px; font-weight: 600;
+  transition: all 0.15s ease;
+}
+.acct-bucket-btn:hover { color: var(--ink); }
+.acct-bucket-btn.on { background: var(--accent); color: #fff; }
 
 /* Wealthfront: a balance replacement, so it reads as before → after */
 .wf-headline { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 20px; }

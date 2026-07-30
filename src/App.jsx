@@ -66,6 +66,9 @@ function Dashboard({ onSignOut }) {
         id: 'budget:' + a.id, budgetAccountId: a.id,
         label: a.name,
         note: (a.kind === 'savings' ? 'Savings' : 'Joint day-to-day') + ' · synced from your statements',
+        // A checking balance is liquid cash; a savings account is money set
+        // aside, so it counts with the investments like the emergency fund.
+        bucket: a.kind === 'savings' ? 'savings' : 'cash',
         value: accountBalance(a.id), apy: null, source: 'budget',
       })),
     [budgetAccounts, accountBalance])

@@ -113,11 +113,24 @@ export const SEED_REVIEWS = [
     'https://www.google.com/finance/quote/REMX:NYSEARCA'),
 ];
 
+// `bucket` decides which side of the picture an account lands on:
+//   'savings' — money with a job (the emergency fund). Shown alongside the
+//               investments and in the allocation ring as its own slice, but it
+//               never gets a rebalance target — it isn't part of the mix.
+//   'cash'    — genuinely liquid: what's sitting in checking and broker cash.
 export const CASH_ACCOUNTS = [
-  { id: 'wealthfront',   label: 'Wealthfront (Joint)',        value: 12513.43, apy: 4.05, note: 'Emergency fund — Melanie & Matheus' },
-  { id: 'chase_mat',     label: 'Chase Checking — Matheus',   value: 0, apy: null, note: 'Day-to-day spending' },
-  { id: 'chase_mel',     label: 'Chase Checking — Melanie',   value: 0, apy: null, note: 'Day-to-day spending' },
-  { id: 'fidelity',      label: 'Fidelity',                   value: 0, apy: null, note: 'Brokerage cash' },
-  { id: 'kraken',        label: 'Kraken',                     value: 0, apy: null, note: 'Crypto exchange cash' },
-  { id: 'ibkr',          label: 'Interactive Brokers',        value: 0, apy: null, note: 'Brokerage cash' },
+  { id: 'wealthfront',   label: 'Wealthfront (Joint)',        value: 12513.43, apy: 4.05, note: 'Emergency fund — Melanie & Matheus', bucket: 'savings' },
+  { id: 'chase_mat',     label: 'Chase Checking — Matheus',   value: 0, apy: null, note: 'Day-to-day spending', bucket: 'cash' },
+  { id: 'chase_mel',     label: 'Chase Checking — Melanie',   value: 0, apy: null, note: 'Day-to-day spending', bucket: 'cash' },
+  { id: 'fidelity',      label: 'Fidelity',                   value: 0, apy: null, note: 'Brokerage cash', bucket: 'cash' },
+  { id: 'kraken',        label: 'Kraken',                     value: 0, apy: null, note: 'Crypto exchange cash', bucket: 'cash' },
+  { id: 'ibkr',          label: 'Interactive Brokers',        value: 0, apy: null, note: 'Brokerage cash', bucket: 'cash' },
 ];
+
+// Accounts saved before `bucket` existed have none, so infer it from the name
+// rather than silently dumping the emergency fund into spending money.
+export const SAVINGS_COLOR = 'var(--cat-savings)';
+export const bucketOf = acc =>
+  acc?.bucket === 'savings' || acc?.bucket === 'cash'
+    ? acc.bucket
+    : (/wealthfront|emergency|savings|reserve/i.test(`${acc?.label || ''} ${acc?.note || ''}`) ? 'savings' : 'cash');
