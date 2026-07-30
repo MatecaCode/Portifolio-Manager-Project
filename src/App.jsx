@@ -66,6 +66,9 @@ function Dashboard({ onSignOut }) {
         id: 'budget:' + a.id, budgetAccountId: a.id,
         label: a.name,
         note: (a.kind === 'savings' ? 'Savings' : 'Joint day-to-day') + ' · synced from your statements',
+        // A checking balance is liquid cash; a savings account is money set
+        // aside, so it counts with the investments like the emergency fund.
+        bucket: a.kind === 'savings' ? 'savings' : 'cash',
         value: accountBalance(a.id), apy: null, source: 'budget',
       })),
     [budgetAccounts, accountBalance])
@@ -117,7 +120,7 @@ function Dashboard({ onSignOut }) {
             {tab === 'holdings'  && <Holdings  holdings={p.holdings} addHolding={p.addHolding} updateHolding={p.updateHolding} removeHolding={p.removeHolding} toggleTag={p.toggleTag} holdingValue={p.holdingValue} holdingCost={p.holdingCost} priceErrors={p.priceErrors} priceMeta={p.priceMeta} priceCoverage={p.priceCoverage} focusCategory={focusCat} onFocusHandled={() => setFocusCat(null)} />}
             {tab === 'rebalance' && <Rebalance holdings={p.holdings} targets={p.targets} categoryTotals={p.categoryTotals} updateTarget={p.updateTarget} updateHolding={p.updateHolding} splitGroupEvenly={p.splitGroupEvenly} normalizeGroup={p.normalizeGroup} holdingValue={p.holdingValue} />}
             {tab === 'review'    && <Review reviews={p.reviews} addReview={p.addReview} updateReview={p.updateReview} rejectReview={p.rejectReview} approveReview={p.approveReview} />}
-            {tab === 'import'    && <Import holdings={p.holdings} reviews={p.reviews} importedLots={p.importedLots} applyTradeImport={p.applyTradeImport} />}
+            {tab === 'import'    && <Import holdings={p.holdings} reviews={p.reviews} importedLots={p.importedLots} applyTradeImport={p.applyTradeImport} accounts={p.accounts} upsertAccountValue={p.upsertAccountValue} />}
           </main>
         </>
       )}

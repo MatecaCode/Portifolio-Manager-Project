@@ -229,7 +229,9 @@ export function parseChecking(rawLines) {
 // Minimal RFC-4180 parser: handles quoted fields, embedded commas, and
 // doubled "" escapes. Chase descriptions can contain commas, so we can't
 // just split on ",".
-function parseCsvRows(text) {
+// Exported so other importers can reuse the quoting/BOM handling instead of
+// each rolling their own split(',').
+export function parseCsvRows(text) {
   const rows = []
   let row = [], field = '', inQuotes = false
   const s = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text // strip BOM
