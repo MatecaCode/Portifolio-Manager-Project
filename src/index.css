@@ -669,6 +669,15 @@ main { display: block; }
 .imp-foot .btn-soft:disabled:hover { border-color: var(--line); color: var(--ink); background: var(--surface); }
 .imp-note { margin-top: 12px; }
 
+/* Wealthfront: a balance replacement, so it reads as before → after */
+.wf-headline { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 20px; }
+.wf-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+.wf-was { font-size: 20px; font-weight: 600; color: var(--muted); }
+.wf-now { font-size: 26px; font-weight: 700; color: var(--accent-deep); }
+.wf-arrow { font-size: 20px; color: var(--muted); }
+.wf-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding-top: 16px; border-top: 1px solid var(--line); }
+@media (max-width: 700px) { .wf-stats { grid-template-columns: 1fr 1fr; } }
+
 @media (max-width: 900px) {
   .imp-row { grid-template-columns: minmax(120px, 1.4fr) 92px 88px minmax(120px, 1fr); gap: 8px; }
   .imp-row > :nth-child(2), .imp-row > :nth-child(5) { display: none; }

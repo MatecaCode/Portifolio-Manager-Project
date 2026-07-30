@@ -1,19 +1,24 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { CATEGORIES } from '../data/portfolio';
 import { parseIbkrFile, planIbkrImport, importSummary, ImportError } from '../lib/ibkr';
+import { parseWealthfrontCash, findWealthfrontAccount, WealthfrontError } from '../lib/wealthfront';
 import { Card, CatDot, Chip, SectionLabel, Term } from './ui';
 import { fmt } from '../lib/format';
 
 // Sources are listed with an explicit `live` flag rather than a blanket
 // "coming soon" banner, so it's obvious which ones actually do something.
 const SOURCES = [
-  { id: 'ibkr',        name: 'Interactive Brokers',   icon: '🌐', live: true,  detail: 'Trade Confirmation report (PDF) — updates holdings and average cost' },
-  { id: 'wealthfront', name: 'Wealthfront',           icon: '🏛️', detail: 'Savings balance from the account CSV export' },
+  { id: 'ibkr',        name: 'Interactive Brokers',   icon: '🌐', live: true, detail: 'Trade Confirmation report (PDF) — updates holdings and average cost' },
+  { id: 'wealthfront', name: 'Wealthfront',           icon: '🏛️', live: true, detail: 'Cash Account CSV — updates your emergency-savings balance' },
   { id: 'chase_bank',  name: 'Chase Bank',            icon: '🏦', detail: 'Checking balances — available on the Budget side' },
   { id: 'kraken',      name: 'Kraken',                icon: '🪙', detail: 'Crypto positions and balances from the ledger CSV' },
   { id: 'fidelity',    name: 'Fidelity',              icon: '📈', detail: 'US stock positions from the portfolio CSV' },
   { id: 'b3',          name: 'B3 / Brazilian broker', icon: '🇧🇷', detail: 'Notas de corretagem and position reports' },
 ];
+
+const prettyDate = d => d
+  ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  : '—';
 
 const catName = id => CATEGORIES.find(c => c.id === id)?.name || id;
 const catColor = id => CATEGORIES.find(c => c.id === id)?.color;
@@ -27,7 +32,7 @@ const STATUS = {
   duplicate:   { label: 'Already imported', tone: 'soft' },
 };
 
-export default function Import({ holdings = [], reviews = [], importedLots = [], applyTradeImport }) {
+export default function Import({ holdings = [], reviews = [], importedLots = [], applyTradeImport, accounts = [], upsertAccountValue }) {
   const [file, setFile] = useState(null);
   const [parsed, setParsed] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -36,18 +41,30 @@ export default function Import({ holdings = [], reviews = [], importedLots = [],
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
 
+  const isTrades = parsed?.source === 'ibkr';
   const plan = useMemo(
-    () => parsed ? planIbkrImport(parsed, { holdings, reviews, importedLots }) : null,
-    [parsed, holdings, reviews, importedLots]);
+    () => isTrades ? planIbkrImport(parsed, { holdings, reviews, importedLots }) : null,
+    [isTrades, parsed, holdings, reviews, importedLots]);
   const summary = plan ? importSummary(plan) : null;
 
+  // Which account a Wealthfront balance would land on, and what it'd replace.
+  const wfAccount = parsed?.kind === 'wealthfront' ? findWealthfrontAccount(accounts) : null;
+
+  // Route by file type: PDF is a broker report, CSV is a cash statement.
   const handleFile = useCallback(async f => {
     if (!f) return;
     setBusy(true); setError(null); setResult(null); setParsed(null); setFile(f);
     try {
-      setParsed(await parseIbkrFile(f));
+      if (/\.csv$/i.test(f.name)) {
+        setParsed(parseWealthfrontCash(await f.text()));
+      } else if (/\.pdf$/i.test(f.name)) {
+        setParsed(await parseIbkrFile(f));
+      } else {
+        throw new ImportError(`"${f.name}" isn't a supported file. Drop an Interactive Brokers PDF or a Wealthfront CSV.`);
+      }
     } catch (e) {
-      setError(e instanceof ImportError ? e.message : `Couldn't read that file: ${e.message}`);
+      setError(e instanceof ImportError || e instanceof WealthfrontError
+        ? e.message : `Couldn't read that file: ${e.message}`);
     } finally {
       setBusy(false);
     }
@@ -70,7 +87,19 @@ export default function Import({ holdings = [], reviews = [], importedLots = [],
   const reset = () => { setFile(null); setParsed(null); setError(null); setResult(null); if (inputRef.current) inputRef.current.value = ''; };
 
   const apply = () => {
-    const res = applyTradeImport(plan);
+    let res;
+    if (isTrades) {
+      res = applyTradeImport(plan);
+    } else {
+      upsertAccountValue({
+        id: wfAccount?.id || 'wealthfront',
+        label: wfAccount?.label || 'Wealthfront (Joint)',
+        note: wfAccount?.note || 'Emergency fund',
+        apy: wfAccount?.apy ?? null,
+        value: parsed.balance,
+      });
+      res = { cash: true, balance: parsed.balance, was: wfAccount?.value ?? 0 };
+    }
     setResult(res);
     setParsed(null);
     setFile(null);
@@ -89,15 +118,16 @@ export default function Import({ holdings = [], reviews = [], importedLots = [],
 
       {/* The file input lives outside the dropzone so the source cards below
           can trigger it too. */}
-      <input ref={inputRef} type="file" accept=".pdf,application/pdf" className="dz-input"
+      <input ref={inputRef} type="file" accept=".pdf,application/pdf,.csv,text/csv" className="dz-input"
         onChange={e => handleFile(e.target.files?.[0])} />
 
       {/* ── Dropzone ── */}
       <button type="button" className={'dropzone' + (dragging ? ' dragging' : '')}
         onClick={pickFile} disabled={busy}>
-        <div className="dropzone-title">{busy ? 'Reading your report…' : 'Drop your IBKR report here'}</div>
+        <div className="dropzone-title">{busy ? 'Reading your file…' : 'Drop a broker or bank file here'}</div>
         <p>
-          Interactive Brokers → <b>Performance &amp; Reports</b> → Trade Confirmations → download as <b>PDF</b>.
+          <b>IBKR trades</b> — Performance &amp; Reports → Trade Confirmations → <b>PDF</b>.<br />
+          <b>Wealthfront savings</b> — Cash Account → Transactions → Download <b>CSV</b>.
         </p>
         <span className="btn-soft dz-btn">{busy ? 'Reading…' : 'Choose a file'}</span>
         {file && !busy && <p className="dz-file mono">{file.name}</p>}
@@ -111,13 +141,75 @@ export default function Import({ holdings = [], reviews = [], importedLots = [],
         </Card>
       )}
 
-      {result && (
+      {result && (result.cash ? (
+        <Card className="import-done">
+          <b>✓ Wealthfront balance updated to {fmt(result.balance)}</b>
+          <p>
+            Was {fmt(result.was)} — a change of {fmt(result.balance - result.was)}. It counts as
+            cash toward net worth on the <b>Overview</b> tab, and stays out of your investment mix.
+          </p>
+        </Card>
+      ) : (
         <Card className="import-done">
           <b>✓ Imported {result.applied} {result.applied === 1 ? 'position' : 'positions'}</b>
           <p>
             {result.created > 0 && <>{result.created} new {result.created === 1 ? 'holding' : 'holdings'} created. </>}
             {result.clearedFromReview > 0 && <>{result.clearedFromReview} cleared from the Review list. </>}
             Check the <b>Holdings</b> tab — prices refresh on the next update.
+          </p>
+        </Card>
+      ))}
+
+      {/* ── Wealthfront preview: a balance, not a set of positions ── */}
+      {parsed?.kind === 'wealthfront' && (
+        <Card>
+          <SectionLabel right={
+            <Chip tone="soft">{prettyDate(parsed.periodStart)} – {prettyDate(parsed.periodEnd)}</Chip>
+          }>
+            What this would change
+          </SectionLabel>
+
+          <div className="wf-headline">
+            <div>
+              <div className="wf-label">{wfAccount?.label || 'Wealthfront (Joint)'} — balance now</div>
+              <div className="wf-was mono">{fmt(wfAccount?.value ?? 0)}</div>
+            </div>
+            <span className="wf-arrow">→</span>
+            <div>
+              <div className="wf-label">After importing</div>
+              <div className="wf-now mono">{fmt(parsed.balance)}</div>
+            </div>
+            <span className="rev-spacer" />
+            <Chip tone={parsed.balance >= (wfAccount?.value ?? 0) ? 'up' : 'warn'}>
+              {parsed.balance >= (wfAccount?.value ?? 0) ? '+' : ''}{fmt(parsed.balance - (wfAccount?.value ?? 0))}
+            </Chip>
+          </div>
+
+          <div className="wf-stats">
+            <div><div className="rs-label">Transactions</div><div className="rs-val mono">{parsed.count}</div></div>
+            <div><div className="rs-label">Deposits in</div><div className="rs-val mono up">{fmt(parsed.deposits)}</div></div>
+            <div><div className="rs-label">Withdrawals</div><div className="rs-val mono down">{fmt(parsed.withdrawals)}</div></div>
+            <div>
+              <div className="rs-label"><Term tip="Interest this account has paid you over the period in the file — the emergency fund earning its keep.">Interest earned</Term></div>
+              <div className="rs-val mono up">{fmt(parsed.interest)}</div>
+            </div>
+          </div>
+
+          <div className="imp-foot">
+            <span className="imp-totals">
+              Balance is the sum of every transaction in the file, so this needs the
+              <b> All time</b> export — a partial one would understate it.
+            </span>
+            <span className="rev-spacer" />
+            <button type="button" className="btn-soft" onClick={reset}>Cancel</button>
+            <button type="button" className="btn-soft on" onClick={apply}>
+              Set balance to {fmt(parsed.balance)}
+            </button>
+          </div>
+
+          <p className="reb-tip imp-note">
+            Savings are <b>not</b> part of the investment allocation — no target %, no rebalancing.
+            It shows up as cash in net worth on Overview, next to what you have invested.
           </p>
         </Card>
       )}

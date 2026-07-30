@@ -264,6 +264,20 @@ export function usePortfolio() {
     })
   }, [holdings, targets, fxRate, reviews, persistState])
 
+  // Set a cash account's balance from an imported statement, creating the
+  // account if it isn't there. Cash sits outside the category allocation, so
+  // this never touches the rebalance targets.
+  const upsertAccountValue = useCallback(({ id, label, note, apy, value }) => {
+    setAccounts(prev => {
+      const i = prev.findIndex(a => a.id === id)
+      const next = i === -1
+        ? [...prev, { id: id || uid(), label: label || 'Imported account', note: note || '', apy: apy ?? null, value }]
+        : prev.map((a, j) => j === i ? { ...a, value } : a)
+      persistState(holdings, targets, fxRate, next, reviews)
+      return next
+    })
+  }, [holdings, targets, fxRate, reviews, persistState])
+
   const removeAccount = useCallback(id => {
     setAccounts(prev => { const next = prev.filter(a => a.id !== id); persistState(holdings, targets, fxRate, next, reviews); return next })
   }, [holdings, targets, fxRate, reviews, persistState])
@@ -372,7 +386,7 @@ export function usePortfolio() {
   return {
     holdings, targets, fxRate, updateFxRate,
     importedLots, applyTradeImport,
-    accounts, addAccount, updateAccount, removeAccount,
+    accounts, addAccount, updateAccount, removeAccount, upsertAccountValue,
     reviews, addReview, updateReview, rejectReview, approveReview,
     priceStatus, priceErrors, priceMeta, priceCoverage, lastUpdated, syncStatus,
     holdingValue, holdingCost, categoryTotals,
