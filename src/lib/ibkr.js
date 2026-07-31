@@ -157,7 +157,14 @@ export function planIbkrImport(parsed, { holdings = [], reviews = [], importedLo
 
     const holding = holdings.find(h => (h.ticker || '').toUpperCase() === t.symbol) || null
     const review = reviews.find(r => (r.ticker || '').toUpperCase() === t.symbol) || null
-    const category = COINGECKO_IDS[t.symbol] ? 'crypto' : (review?.category || holding?.category || 'us_stocks')
+    // Bucket = what kind of bet it is. A candidate you already triaged on the
+    // Review tab knows its own sleeve (Water, Rare Earths…), so that wins over
+    // the generic fallback.
+    const category = COINGECKO_IDS[t.symbol] ? 'crypto' : (review?.category || holding?.category || 'stocks')
+    // Sticker = where it trades, which decides its currency. IBKR reports in
+    // USD, so anything it tells us about is dollar-priced unless we already
+    // know better from an existing holding or a triaged candidate.
+    const region = holding?.region || review?.region || (COINGECKO_IDS[t.symbol] ? 'global' : 'us')
 
     let status
     if (Math.abs(netQty) < 1e-8) status = 'duplicate'
@@ -167,7 +174,7 @@ export function planIbkrImport(parsed, { holdings = [], reviews = [], importedLo
     else status = 'first-buy'
 
     return {
-      ...t, key, netQty, already, status, category,
+      ...t, key, netQty, already, status, category, region,
       holdingId: holding?.id || null,
       existingShares: holding?.shares || 0,
       existingCost: holding?.cost || 0,

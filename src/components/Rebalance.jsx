@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CATEGORIES } from '../data/portfolio';
-import { Card, CatDot, Chip, ProgressBar, SectionLabel, Term } from './ui';
+import { Card, CatDot, Chip, ProgressBar, RegionBadge, SectionLabel, Term } from './ui';
 import { fmt0 } from '../lib/format';
 
 const pctOf = h => parseFloat(h.targetPct) || 0;
@@ -59,6 +59,10 @@ function GroupSplit({ cat, items, groupTarget, groupValue, totalVal, holdingValu
               <div className="reb-h-row" key={h.id}>
                 <span className="reb-h-id">
                   <span className="reb-h-tick mono">{h.ticker || '—'}</span>
+                  {/* a group can hold reais and dollars at once now, and every
+                      figure in this table is USD — the sticker says which rows
+                      were converted to get there */}
+                  <RegionBadge region={h.region} size="sm" />
                   <span className="reb-h-name">{h.name}</span>
                   {(h.shares || 0) <= 0 && <span className="reb-h-flag">not bought yet</span>}
                 </span>
@@ -198,7 +202,7 @@ export default function Rebalance({ holdings, targets, categoryTotals, updateTar
             <Card className={'reb-card' + (isOpen ? ' reb-card-open' : '')} key={cat.id}>
               <div className="reb-card-head">
                 <CatDot color={cat.color} size={10} />
-                <span className="reb-card-name">{cat.name}</span>
+                <span className="reb-card-name"><Term tip={cat.blurb}>{cat.name}</Term></span>
                 <label className="reb-target">
                   Target
                   <input type="number" className="reb-input mono" value={targets[cat.id]} min="0" max="100" step="0.5"

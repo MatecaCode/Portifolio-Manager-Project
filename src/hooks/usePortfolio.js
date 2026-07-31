@@ -1,9 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { fetchAllPrices } from '../lib/prices'
-import { SEED_HOLDINGS, DEFAULT_TARGETS, CATEGORIES, CASH_ACCOUNTS, SEED_REVIEWS } from '../data/portfolio'
+import { SEED_HOLDINGS, DEFAULT_TARGETS, CATEGORIES, CASH_ACCOUNTS, SEED_REVIEWS,
+         DEFAULT_CATEGORY_REGION, DEFAULT_REGION, REGIONS, holdingCurrency, holdingRegion } from '../data/portfolio'
+import { migrateHoldings, migrateReviews, migrateTargets } from '../lib/migrate'
 
 const LS_KEY = 'portfolio_v4'
+
+// Columns added after the table was first created. A deployment whose Supabase
+// schema predates them still syncs everything else.
+const OPTIONAL_COLUMNS = ['reviews', 'imported_lots']
 
 function lsLoad() {
   try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : null } catch { return null }
@@ -44,15 +50,17 @@ export function usePortfolio() {
             .eq('id', 'shared')
             .single()
           if (!error && data) {
-            setHoldings(data.holdings?.length ? data.holdings : SEED_HOLDINGS)
+            // Saved state predates the country-sticker split, so everything
+            // coming out of storage passes through the migration first.
+            setHoldings(migrateHoldings(data.holdings?.length ? data.holdings : SEED_HOLDINGS))
             setAccounts(data.accounts?.length ? data.accounts : CASH_ACCOUNTS)
-            setTargets(data.targets && Object.keys(data.targets).length ? data.targets : DEFAULT_TARGETS)
+            setTargets(data.targets && Object.keys(data.targets).length ? migrateTargets(data.targets) : DEFAULT_TARGETS)
             setFxRate(data.fx_rate || 5.70)
             // reviews: an empty cloud list is a legit "reviewed everything" state,
             // so respect any array. Only seed when the column is absent (undefined)
             // and there's no local copy either.
-            if (Array.isArray(data.reviews)) setReviews(data.reviews)
-            else setReviews(lsLoad()?.reviews ?? SEED_REVIEWS)
+            if (Array.isArray(data.reviews)) setReviews(migrateReviews(data.reviews))
+            else setReviews(migrateReviews(lsLoad()?.reviews ?? SEED_REVIEWS))
             setImportedLots(Array.isArray(data.imported_lots) ? data.imported_lots : (lsLoad()?.importedLots ?? []))
             setSyncStatus('synced')
             setReady(true)
@@ -62,11 +70,11 @@ export function usePortfolio() {
       }
       // Fallback to localStorage
       const saved = lsLoad()
-      setHoldings(saved?.holdings?.length ? saved.holdings : SEED_HOLDINGS)
+      setHoldings(migrateHoldings(saved?.holdings?.length ? saved.holdings : SEED_HOLDINGS))
       setAccounts(saved?.accounts?.length ? saved.accounts : CASH_ACCOUNTS)
-      setTargets(saved?.targets || DEFAULT_TARGETS)
+      setTargets(saved?.targets ? migrateTargets(saved.targets) : DEFAULT_TARGETS)
       setFxRate(saved?.fxRate || 5.70)
-      setReviews(saved?.reviews ?? SEED_REVIEWS)
+      setReviews(migrateReviews(saved?.reviews ?? SEED_REVIEWS))
       setImportedLots(saved?.importedLots ?? [])
       setSyncStatus('local')
       setReady(true)
@@ -84,14 +92,13 @@ export function usePortfolio() {
       try {
         const row = { id: 'shared', holdings: h, targets: t, fx_rate: fx, accounts: acc, reviews: rev, imported_lots: lots, updated_at: new Date().toISOString() }
         let { error } = await supabase.from('portfolio_state').upsert(row)
-        // Self-heal: if the `reviews` / `imported_lots` columns haven't been
-        // added yet, save everything else (those stay in localStorage) instead
-        // of failing the whole write. Cloud sync starts once they exist —
-        // supabase_setup.sql adds them.
-        if (error && /review|imported_lots/i.test(error.message || '')) {
+        // Self-heal: a column that hasn't been added to the table yet shouldn't
+        // fail the whole write. Drop just the missing ones and save the rest
+        // (they stay in localStorage); cloud sync starts once the column exists.
+        const missing = error ? OPTIONAL_COLUMNS.filter(c => new RegExp(c, 'i').test(error.message || '')) : []
+        if (missing.length) {
           const rest = { ...row }
-          delete rest.reviews
-          delete rest.imported_lots
+          missing.forEach(c => delete rest[c])
           ;({ error } = await supabase.from('portfolio_state').upsert(rest))
         }
         setSyncStatus(error ? 'error' : 'synced')
@@ -144,15 +151,13 @@ export function usePortfolio() {
   const toUSD = useCallback((amount, currency) =>
     currency === 'BRL' ? amount / fxRate : amount, [fxRate])
 
-  const holdingValue = useCallback(h => {
-    const cat = CATEGORIES.find(c => c.id === h.category)
-    return toUSD((h.shares || 0) * (h.price || 0), cat?.currency || 'USD')
-  }, [toUSD])
+  // Currency follows the country sticker, not the bucket — that's what lets a
+  // bucket like Stocks or Energy hold a B3 name and a NYSE name side by side.
+  const holdingValue = useCallback(h =>
+    toUSD((h.shares || 0) * (h.price || 0), holdingCurrency(h)), [toUSD])
 
-  const holdingCost = useCallback(h => {
-    const cat = CATEGORIES.find(c => c.id === h.category)
-    return toUSD((h.shares || 0) * (h.cost || 0), cat?.currency || 'USD')
-  }, [toUSD])
+  const holdingCost = useCallback(h =>
+    toUSD((h.shares || 0) * (h.cost || 0), holdingCurrency(h)), [toUSD])
 
   const categoryTotals = useCallback(() => {
     const t = {}
@@ -167,12 +172,29 @@ export function usePortfolio() {
     return t
   }, [holdings, holdingValue, holdingCost])
 
+  // Splitting BR Stocks / US Stocks into thesis buckets would have hidden the
+  // geographic mix, so the stickers add it back as its own view.
+  const regionTotals = useCallback(() => {
+    const t = {}
+    REGIONS.forEach(r => t[r.id] = { value: 0, cost: 0, count: 0, owned: 0 })
+    holdings.forEach(h => {
+      const bucket = t[holdingRegion(h).id]
+      if (!bucket) return
+      bucket.value += holdingValue(h)
+      bucket.cost  += holdingCost(h)
+      bucket.count++
+      if ((h.shares || 0) > 0) bucket.owned++
+    })
+    return t
+  }, [holdings, holdingValue, holdingCost])
+
   // ── CRUD ──
   const uid = () => 'h_' + Math.random().toString(36).slice(2, 9)
 
   const addHolding = useCallback(categoryId => {
     setHoldings(prev => {
-      const next = [...prev, { id: uid(), category: categoryId, ticker: '', name: '', shares: 0, cost: 0, price: 0, targetPct: 0, finclass: false, energy: false }]
+      const next = [...prev, { id: uid(), category: categoryId, region: DEFAULT_CATEGORY_REGION[categoryId] || DEFAULT_REGION,
+        ticker: '', name: '', shares: 0, cost: 0, price: 0, targetPct: 0, finclass: false }]
       persistState(next, targets, fxRate, accounts, reviews)
       return next
     })
@@ -285,7 +307,7 @@ export function usePortfolio() {
   // ── Investments-for-review CRUD ──
   const addReview = useCallback(() => {
     setReviews(prev => {
-      const next = [...prev, { id: 'r_' + Math.random().toString(36).slice(2, 9), ticker: '', name: '', category: 'us_stocks', theme: '', groupPct: 0, thesis: '', link: null, source: 'Manual' }]
+      const next = [...prev, { id: 'r_' + Math.random().toString(36).slice(2, 9), ticker: '', name: '', category: 'stocks', region: DEFAULT_REGION, theme: '', groupPct: 0, thesis: '', link: null, source: 'Manual' }]
       persistState(holdings, targets, fxRate, accounts, next)
       return next
     })
@@ -316,8 +338,9 @@ export function usePortfolio() {
     if (!r) return
     const nextReviews = reviews.filter(x => x.id !== id)
     const nextHoldings = [...holdings, {
-      id: uid(), category: r.category, ticker: (r.ticker || '').toUpperCase(), name: r.name,
-      shares: 0, cost: 0, price: 0, finclass: false, energy: false,
+      id: uid(), category: r.category, region: r.region || DEFAULT_CATEGORY_REGION[r.category] || DEFAULT_REGION,
+      ticker: (r.ticker || '').toUpperCase(), name: r.name,
+      shares: 0, cost: 0, price: 0, finclass: false,
       targetPct: r.groupPct || 0, thesis: r.thesis || '', link: r.link || null, theme: r.theme || '',
     }]
     setReviews(nextReviews)
@@ -348,8 +371,12 @@ export function usePortfolio() {
         created++
         next.push({
           id: uid(), category: r.category, ticker: r.symbol, name: r.name,
+          // The sticker comes from the plan (review candidate, existing
+          // holding, or listing exchange); the bucket's default is the
+          // fallback. It decides the currency, so it can't be left unset.
+          region: r.region || DEFAULT_CATEGORY_REGION[r.category] || DEFAULT_REGION,
           shares: r.netQty, cost: r.unitCost, price: r.price,
-          targetPct: r.targetPct ?? 0, finclass: false, energy: false,
+          targetPct: r.targetPct ?? 0, finclass: false,
           thesis: r.thesis || '', theme: r.theme || '',
         })
       } else {
@@ -389,7 +416,7 @@ export function usePortfolio() {
     accounts, addAccount, updateAccount, removeAccount, upsertAccountValue,
     reviews, addReview, updateReview, rejectReview, approveReview,
     priceStatus, priceErrors, priceMeta, priceCoverage, lastUpdated, syncStatus,
-    holdingValue, holdingCost, categoryTotals,
+    holdingValue, holdingCost, categoryTotals, regionTotals,
     addHolding, updateHolding, removeHolding, toggleTag,
     updateTarget, splitGroupEvenly, normalizeGroup, manualRefresh, ready,
   }

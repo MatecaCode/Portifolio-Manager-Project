@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { CATEGORIES } from '../data/portfolio';
 import { parseIbkrFile, planIbkrImport, importSummary, ImportError } from '../lib/ibkr';
 import { parseWealthfrontCash, findWealthfrontAccount, WealthfrontError } from '../lib/wealthfront';
-import { Card, CatDot, Chip, SectionLabel, Term } from './ui';
+import { Card, CatDot, Chip, RegionBadge, SectionLabel, Term } from './ui';
 import { fmt } from '../lib/format';
 
 // Sources are listed with an explicit `live` flag rather than a blanket
@@ -250,6 +250,9 @@ export default function Import({ holdings = [], reviews = [], importedLots = [],
                   </span>
                   <span className="imp-cat">
                     <CatDot color={catColor(r.category)} size={9} /> {catName(r.category)}
+                    {/* the bucket says what kind of bet it is, the sticker where
+                        it trades — and the sticker is what sets its currency */}
+                    <RegionBadge region={r.region} size="sm" />
                   </span>
                   <span className="imp-num mono">{qty(Math.abs(dim ? r.qty : r.netQty))}</span>
                   <span className="imp-num mono">{fmt(r.unitCost)}</span>

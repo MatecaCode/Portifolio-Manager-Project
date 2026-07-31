@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CATEGORIES, SAVINGS_COLOR, bucketOf } from '../data/portfolio';
+import { CATEGORIES, REGIONS, bucketOf } from '../data/portfolio';
 import { Card, CatDot, Chip, Donut, ProgressBar, SectionLabel, Term } from './ui';
 import { fmt, fmt0 } from '../lib/format';
 
@@ -23,8 +23,9 @@ function greeting() {
   return 'Good evening, you two 🌙';
 }
 
-export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, onCategoryClick, accounts, derivedAccounts = [], addAccount, updateAccount, removeAccount, onManageBudget }) {
+export default function Overview({ holdings, categoryTotals, regionTotals, fxRate, setFxRate, onCategoryClick, accounts, derivedAccounts = [], addAccount, updateAccount, removeAccount, onManageBudget }) {
   const totals = categoryTotals();
+  const byRegion = regionTotals();
   const totalVal = Object.values(totals).reduce((a, t) => a + t.value, 0);
   const totalCost = Object.values(totals).reduce((a, t) => a + t.cost, 0);
   const pnl = totalVal - totalCost;
@@ -36,7 +37,6 @@ export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, 
   const savingsTotal = allAccounts.filter(a => bucketOf(a) === 'savings').reduce((a, c) => a + (c.value || 0), 0);
   const cashTotal    = allAccounts.filter(a => bucketOf(a) !== 'savings').reduce((a, c) => a + (c.value || 0), 0);
   const pendingBalances = derivedAccounts.filter(c => c.value == null).length;
-  const investedTotal = totalVal + savingsTotal;
   const accountCount = allAccounts.filter(a => bucketOf(a) !== 'savings').length;
   const netWorth = totalVal + savingsTotal + cashTotal;
   const ownedCount = holdings.filter(h => (h.shares || 0) > 0).length;
@@ -60,18 +60,25 @@ export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, 
     }
   }, [netWorth]);
 
-  // The ring shows everything working for you — the investment categories plus
-  // the emergency fund as its own slice. It has no rebalance target, so this is
-  // deliberately a wider picture than the Rebalance tab's mix.
-  const ownedSlices = [
-    ...CATEGORIES.map(c => ({ id: c.id, color: c.color, value: totals[c.id].value })),
-    { id: 'savings', color: SAVINGS_COLOR, value: savingsTotal },
-  ].filter(s => s.value > 0);
+  // The ring is the investment mix, full stop — the same categories Rebalance
+  // tracks. The emergency fund has no rebalance target and isn't a bet on
+  // anything, so it doesn't compete for a slice here; it gets its own stat
+  // instead (see the hero above).
+  const ownedSlices = CATEGORIES
+    .map(c => ({ id: c.id, color: c.color, value: totals[c.id].value }))
+    .filter(s => s.value > 0);
   const slices = ownedSlices.length ? ownedSlices : [{ id: 'none', color: 'var(--accent-soft)', value: 1 }];
 
   const sortedCategories = [...CATEGORIES].sort((a, b) => totals[b.id].value - totals[a.id].value);
   const diversified = slices.length > 1;
-  const savingsShare = investedTotal > 0 ? (savingsTotal / investedTotal * 100) : 0;
+  const savingsShareOfNetWorth = netWorth > 0 ? (savingsTotal / netWorth * 100) : 0;
+
+  // Country lives on each holding now, so the geographic mix is its own view
+  // rather than something you read off the bucket names.
+  const regionSlices = REGIONS
+    .map(r => ({ ...r, value: byRegion[r.id].value }))
+    .filter(r => r.value > 0)
+    .sort((a, b) => b.value - a.value);
 
   return (
     <div className="screen">
@@ -85,7 +92,7 @@ export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, 
             </div>
           )}
           <div className="hero-networth">
-            <Term tip="Everything you own minus everything you owe. Here it's your investments plus your cash.">Net worth</Term>
+            <Term tip="Everything you own minus everything you owe. Here it's your investments, your emergency fund, and your cash.">Net worth</Term>
             <div className="hero-amount">{fmt(netWorth)}</div>
           </div>
           <div>
@@ -116,12 +123,18 @@ export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, 
         </div>
         <div className="hero-right">
           <div className="hero-stat">
-            <div className="hs-label"><Term tip="Everything working for you: stocks, funds and crypto, plus the emergency fund.">Invested</Term></div>
-            <div className="hs-value">{fmt(investedTotal)}</div>
-            {savingsTotal > 0 && <div className="hs-sub">{fmt(totalVal)} in markets · {fmt(savingsTotal)} emergency fund</div>}
+            <div className="hs-label"><Term tip="Money in stocks, funds and crypto — the categories tracked on the Rebalance tab. The emergency fund isn't a bet on anything, so it's kept separate below.">Invested</Term></div>
+            <div className="hs-value">{fmt(totalVal)}</div>
           </div>
+          {savingsTotal > 0 && (
+            <div className="hero-stat">
+              <div className="hs-label"><Term tip="Money set aside for emergencies. It's real money working for you — it counts toward net worth — but it isn't an investment: no rebalance target, no market risk, its own thing.">Emergency fund</Term></div>
+              <div className="hs-value">{fmt(savingsTotal)}</div>
+              <div className="hs-sub">{savingsShareOfNetWorth.toFixed(0)}% of net worth</div>
+            </div>
+          )}
           <div className="hero-stat">
-            <div className="hs-label"><Term tip="Truly liquid money — what's sitting in your checking and broker cash accounts, ready to spend or invest. The emergency fund isn't counted here; it's under Invested.">Cash</Term></div>
+            <div className="hs-label"><Term tip="Truly liquid money — what's sitting in your checking and broker cash accounts, ready to spend or invest.">Cash</Term></div>
             <div className="hs-value">{fmt(cashTotal)}</div>
             <div className="hs-sub">
               across {accountCount} account{accountCount === 1 ? '' : 's'}
@@ -145,28 +158,49 @@ export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, 
           <div className="alloc-body">
             <Donut
               slices={slices}
-              centerTop={fmt0(investedTotal)}
+              centerTop={fmt0(totalVal)}
               centerBottom="invested"
             />
             <div className="alloc-note">
               <div className="alloc-legend">
-                {CATEGORIES.map(c => (
-                  <span className="legend-item" key={c.id}><CatDot color={c.color} /> {c.name}</span>
+                {sortedCategories.map(c => (
+                  <span className={'legend-item' + (totals[c.id].value > 0 ? '' : ' legend-empty')} key={c.id}>
+                    <CatDot color={c.color} /> {c.name}
+                  </span>
                 ))}
-                <span className="legend-item">
-                  <CatDot color={SAVINGS_COLOR} />
-                  <Term tip="Your emergency fund. It's shown here because it's real money working for you, but it has no rebalance target — it isn't part of the investment mix.">Emergency fund</Term>
-                </span>
               </div>
               <p className="alloc-line">
-                {savingsTotal > 0 && totalVal > 0
-                  ? <>The emergency fund is <b>{savingsShare.toFixed(0)}%</b> of this ring. As you invest more, that share shrinks — which is the shape you're going for. 🦩</>
-                  : diversified
-                    ? <>Money spread across {slices.length} categories — the <b>Rebalance</b> tab shows how close you are to the mix you chose. 🦩</>
-                    : <>All eggs in one basket for now — the <b>Rebalance</b> tab has the plan to spread new money around. Every color here is a future win. 🦩</>}
+                {diversified
+                  ? <>Money spread across {slices.length} categories — the <b>Rebalance</b> tab shows how close you are to the mix you chose. 🦩</>
+                  : <>All eggs in one basket for now — the <b>Rebalance</b> tab has the plan to spread new money around. Every color here is a future win. 🦩</>}
               </p>
             </div>
           </div>
+
+          {regionSlices.length > 0 && (
+            <div className="region-split">
+              {/* Percentages here are of market holdings only. The ring above
+                  also counts the emergency fund, which has no country — sharing
+                  a denominator would make both numbers wrong. */}
+              <div className="region-split-label">
+                <Term tip="Where your money actually sits in the world. Each holding carries a country sticker — this adds them up. The emergency fund isn't in here: it's cash, not a bet on a country.">By country</Term>
+                {savingsTotal > 0 && <span className="region-split-scope">of {fmt0(totalVal)} in markets</span>}
+              </div>
+              <div className="region-bar">
+                {regionSlices.map(r => (
+                  <div key={r.id} className="region-bar-seg" style={{ width: `${r.value / totalVal * 100}%`, background: r.color }}
+                    title={`${r.name}: ${fmt(r.value)} (${(r.value / totalVal * 100).toFixed(1)}%)`} />
+                ))}
+              </div>
+              <div className="region-split-legend">
+                {regionSlices.map(r => (
+                  <span className="legend-item" key={r.id}>
+                    <CatDot color={r.color} /> {r.code} {(r.value / totalVal * 100).toFixed(0)}%
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </Card>
 
         <Card>
@@ -180,9 +214,7 @@ export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, 
                   title={`Click to see the ${c.name} investments`}>
                   <CatDot color={c.color} />
                   <div className="cat-name">
-                    {c.id === 'fii' ? <span><Term tip="Fundos Imobiliários — Brazilian real-estate funds that pay monthly rent-like income.">{c.name}</Term></span>
-                      : c.id === 'renda_fixa' ? <span><Term tip="Brazil's version of bonds and CDs — steady, predictable interest.">{c.name}</Term></span>
-                      : c.name}
+                    <span><Term tip={c.blurb}>{c.name}</Term></span>
                     <span className="cat-sub">{t.owned} owned · {t.count} on the list</span>
                   </div>
                   <div className="cat-vals">
@@ -194,19 +226,6 @@ export default function Overview({ holdings, categoryTotals, fxRate, setFxRate, 
                 </div>
               );
             })}
-            {savingsTotal > 0 && (
-              <div className="cat-row" title="Your emergency fund — held in cash savings, so there's no market gain or loss to show.">
-                <CatDot color={SAVINGS_COLOR} />
-                <div className="cat-name">
-                  <span><Term tip="Money set aside for emergencies. It counts toward what you have working for you, but it has no rebalance target — it's deliberately outside the investment mix.">Emergency fund</Term></span>
-                  <span className="cat-sub">not part of the rebalance mix</span>
-                </div>
-                <div className="cat-vals">
-                  <div className="cat-value">{fmt(savingsTotal)}</div>
-                  <div className="cat-pl flat">{savingsShare.toFixed(1)}% of invested</div>
-                </div>
-              </div>
-            )}
           </div>
         </Card>
       </div>

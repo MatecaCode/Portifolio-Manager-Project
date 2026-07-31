@@ -15,7 +15,7 @@ export const isCashAccount = kind => CASH_ACCOUNT_KINDS.includes(kind)
 // pdfjs is loaded lazily so the (large) library and worker only download
 // when someone actually imports a statement.
 let pdfjsPromise = null
-function loadPdfjs() {
+export function loadPdfjs() {
   if (!pdfjsPromise) {
     pdfjsPromise = Promise.all([
       import('pdfjs-dist'),
