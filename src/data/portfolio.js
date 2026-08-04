@@ -70,8 +70,8 @@ export const COINGECKO_IDS = {
 };
 
 const uid = () => 'h_' + Math.random().toString(36).slice(2, 9);
-const mk = (cat, region, ticker, name, shares, cost, price, finclass = false) =>
-  ({ id: uid(), category: cat, region, ticker, name, shares, cost, price, finclass });
+const mk = (cat, region, ticker, name, shares, cost, price, finclass = false, thesis = null, greenFlags = [], redFlags = []) =>
+  ({ id: uid(), category: cat, region, ticker, name, shares, cost, price, finclass, thesis, greenFlags, redFlags });
 
 export const SEED_HOLDINGS = [
   // Stocks — Brazilian FinClass picks
@@ -94,9 +94,27 @@ export const SEED_HOLDINGS = [
   mk('intl', 'br', 'ACE-CAP', 'ACE Capital (multimercado)', 0, 1, 1, true),
   mk('intl', 'br', 'GENOA',   'Genoa Capital Radar',        0, 1, 1, true),
   // Energy — the AI-power thesis
-  mk('energy', 'us', 'CEG', 'Constellation Energy', 0, 280, 280),
-  mk('energy', 'us', 'VRT', 'Vertiv',               0, 110, 110),
-  mk('energy', 'us', 'BE',  'Bloom Energy',         0, 35,  35),
+  mk('energy', 'us', 'CEG', 'Constellation Energy', 0, 280, 280, false,
+    'Pure-play nuclear energy provider benefiting from AI data-center power demand. Long-term growth from carbon-free electricity.',
+    ['Strong moat: established nuclear fleet', 'Benefits from energy infrastructure consolidation', 'Aligned with global decarbonization'],
+    ['Nuclear regulatory risk', 'Long capex cycles', 'Dependent on US energy policy']),
+  mk('energy', 'us', 'VRT', 'Vertiv',               0, 110, 110, false,
+    'Infrastructure software and cooling systems for data centers. Play on AI infrastructure build-out.',
+    ['Market leader in critical infrastructure', 'High-margin recurring revenue model', 'Secular growth from AI/edge computing'],
+    ['High valuation', 'Competition from larger players', 'Supply chain dependencies']),
+  mk('energy', 'us', 'BE',  'Bloom Energy',         0, 35,  35, false,
+    'Solid oxide fuel cells for distributed power generation. Targets industrial/commercial decarbonization.',
+    ['Unique technology with high barriers', 'Growing government incentives (Inflation Reduction Act)', 'Large addressable market'],
+    ['Pre-revenue path still uncertain', 'Technical risks in scale-up', 'Competition from cheaper alternatives']),
+  // Water — the AI-cooling thesis
+  mk('water', 'us', 'XYL', 'Xylem', 0, 95, 95, false,
+    'Water pumps, filtration and treatment tech. Direct AI-data-center exposure through partnership with Dow.',
+    ['Expansion into high-margin data-center cooling', 'Recurring revenue model', 'Established industrial brand'],
+    ['Macro-dependent capex cycles', 'Saturation risk in mature markets', 'Energy cost sensitivity']),
+  mk('water', 'us', 'PHO', 'Invesco Water Resources ETF', 0, 41, 41, false,
+    'Diversified basket of water-infrastructure companies. Lower-risk thematic play on AI\'s water needs.',
+    ['Diversified across water value chain', 'Lower single-stock risk', 'Dividend-paying', 'Exposure to global water scarcity trends'],
+    ['Diluted by non-AI water holdings', 'Dividend cuts possible in downturn', 'Limited upside from concentration']),
   // Crypto - real positions
   mk('crypto', 'global', 'BTC',  'Bitcoin',    0.04718,   86845.51, 77477.10),
   mk('crypto', 'global', 'ETH',  'Ethereum',   0.58505,   2874.54,  2311.04),

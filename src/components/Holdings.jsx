@@ -14,7 +14,7 @@ const SECTIONS = [
 const fmtQty = n => n.toLocaleString('en-US', { maximumFractionDigits: 5 });
 const fmtNum = n => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function HoldingRow({ holding, onUpdate, onRemove, onToggleTag, editMode, onTickerClick, live }) {
+function HoldingRow({ holding, onUpdate, onRemove, onToggleTag, editMode, onTickerClick, live, onEditThesis }) {
   const valLocal = (holding.shares || 0) * (holding.price || 0);
   const costLocal = (holding.shares || 0) * (holding.cost || 0);
   const pnlPct = costLocal > 0 ? ((valLocal - costLocal) / costLocal * 100) : 0;
@@ -26,6 +26,8 @@ function HoldingRow({ holding, onUpdate, onRemove, onToggleTag, editMode, onTick
   // Currency comes from the country sticker, not the bucket — a single bucket
   // can hold a B3 name and a NYSE name.
   const sym = currencySymbol(holdingCurrency(holding));
+  const greenFlagCount = (holding.greenFlags || []).length;
+  const redFlagCount = (holding.redFlags || []).length;
 
   if (editMode) {
     return (
@@ -65,6 +67,12 @@ function HoldingRow({ holding, onUpdate, onRemove, onToggleTag, editMode, onTick
         {isLive
           ? <span className="live-chip" title={`Price updated from ${live.source} this session`}>LIVE</span>
           : owned && <span className="stale-chip" title="No live quote arrived for this one — the price shown is the last saved value. See the price notice above.">stale</span>}
+        {greenFlagCount > 0 && <span className="flag-badge-mini green" title={`${greenFlagCount} green flags`}>🟢{greenFlagCount}</span>}
+        {redFlagCount > 0 && <span className="flag-badge-mini red" title={`${redFlagCount} red flags`}>🔴{redFlagCount}</span>}
+        {(greenFlagCount > 0 || redFlagCount > 0 || holding.thesis) && (
+          <button className="btn-thesis" type="button" title="View investment thesis and flags"
+            onClick={() => onEditThesis(holding)}>📋</button>
+        )}
       </span>
       <span className="num mono">{owned ? fmtQty(holding.shares) : '—'}</span>
       <span className="num mono">{fmtNum(holding.cost || 0)}</span>
@@ -74,6 +82,141 @@ function HoldingRow({ holding, onUpdate, onRemove, onToggleTag, editMode, onTick
         style={owned ? undefined : { fontStyle: 'italic', fontSize: 12.5 }}>
         {owned ? (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%' : 'on the list'}
       </span>
+    </div>
+  );
+}
+
+function FlagInput({ flags, onAdd, onRemove, type }) {
+  const [input, setInput] = useState('');
+  return (
+    <div className="flag-section">
+      <label className="flag-label">{type === 'green' ? '🟢 Green flags' : '🔴 Red flags'}</label>
+      <div className="flag-list">
+        {(flags || []).map((flag, i) => (
+          <div key={i} className={`flag-badge flag-${type}`}>
+            {flag}
+            <button type="button" className="flag-remove" onClick={() => onRemove(i)}>×</button>
+          </div>
+        ))}
+      </div>
+      <div className="flag-input-row">
+        <input
+          type="text"
+          className="flag-input"
+          placeholder={`Add a ${type} flag…`}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyPress={e => {
+            if (e.key === 'Enter' && input.trim()) {
+              onAdd(input.trim());
+              setInput('');
+            }
+          }}
+        />
+        <button type="button" className="btn-soft"
+          onClick={() => { if (input.trim()) { onAdd(input.trim()); setInput(''); } }}>
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function InvestmentThesisModal({ holding, onClose, onUpdate }) {
+  const [thesis, setThesis] = useState(holding.thesis || '');
+  const [unsavedChanges, setUnsavedChanges] = useState(false);
+  const info = TICKER_INFO[holding.ticker?.toUpperCase()];
+  const cat = categoryById(holding.category);
+  const region = holdingRegion(holding);
+  const text = info?.text || thesis;
+  const link = info?.link || holding.link;
+
+  const handleThesisChange = (e) => {
+    setThesis(e.target.value);
+    setUnsavedChanges(true);
+  };
+
+  const handleAddGreenFlag = (flag) => {
+    const flags = [...(holding.greenFlags || []), flag];
+    onUpdate(holding.id, 'greenFlags', flags);
+  };
+
+  const handleRemoveGreenFlag = (idx) => {
+    const flags = (holding.greenFlags || []).filter((_, i) => i !== idx);
+    onUpdate(holding.id, 'greenFlags', flags);
+  };
+
+  const handleAddRedFlag = (flag) => {
+    const flags = [...(holding.redFlags || []), flag];
+    onUpdate(holding.id, 'redFlags', flags);
+  };
+
+  const handleRemoveRedFlag = (idx) => {
+    const flags = (holding.redFlags || []).filter((_, i) => i !== idx);
+    onUpdate(holding.id, 'redFlags', flags);
+  };
+
+  const handleSaveThesis = () => {
+    if (thesis !== (holding.thesis || '')) {
+      onUpdate(holding.id, 'thesis', thesis);
+    }
+    setUnsavedChanges(false);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal thesis-modal" onClick={e => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose}>×</button>
+        <span className="modal-ticker mono">{holding.ticker}</span>
+        <h3 className="modal-title">{info?.title || holding.name || 'Unknown'}</h3>
+        <p className="modal-cat">
+          <CatDot color={cat?.color} /> {cat?.name} · {region.name} · priced in {region.currency}
+        </p>
+
+        <div className="thesis-section">
+          <label className="thesis-label">Investment Thesis</label>
+          <textarea
+            className="thesis-textarea"
+            value={thesis}
+            onChange={handleThesisChange}
+            placeholder="Why do you own this? What's the investment case?"
+            rows={4}
+          />
+          {unsavedChanges && (
+            <button type="button" className="btn-soft" onClick={handleSaveThesis}>
+              💾 Save thesis
+            </button>
+          )}
+        </div>
+
+        <div className="flags-container">
+          <FlagInput
+            flags={holding.greenFlags}
+            onAdd={handleAddGreenFlag}
+            onRemove={handleRemoveGreenFlag}
+            type="green"
+          />
+          <FlagInput
+            flags={holding.redFlags}
+            onAdd={handleAddRedFlag}
+            onRemove={handleRemoveRedFlag}
+            type="red"
+          />
+        </div>
+
+        <div className="modal-foot">
+          {text && (
+            <p className="modal-text">
+              {text}
+            </p>
+          )}
+          {link && (
+            <a className="modal-link" href={link} target="_blank" rel="noreferrer">
+              See live quote &amp; details ↗
+            </a>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -153,6 +296,7 @@ export default function Holdings({ holdings, addHolding, updateHolding, removeHo
   focusCategory, onFocusHandled, priceErrors, priceMeta = {}, priceCoverage }) {
   const [editMode, setEditMode] = useState(false);
   const [infoHolding, setInfoHolding] = useState(null);
+  const [thesisHolding, setThesisHolding] = useState(null);
 
   useEffect(() => {
     if (!focusCategory) return;
@@ -259,6 +403,7 @@ export default function Holdings({ holdings, addHolding, updateHolding, removeHo
                       onToggleTag={toggleTag}
                       editMode={editMode}
                       onTickerClick={setInfoHolding}
+                      onEditThesis={setThesisHolding}
                       live={priceMeta[h.ticker?.toUpperCase()]}
                     />
                   ))}
@@ -273,6 +418,7 @@ export default function Holdings({ holdings, addHolding, updateHolding, removeHo
       ))}
 
       {infoHolding && <TickerModal holding={infoHolding} onClose={() => setInfoHolding(null)} />}
+      {thesisHolding && <InvestmentThesisModal holding={thesisHolding} onClose={() => setThesisHolding(null)} onUpdate={updateHolding} />}
     </div>
   );
 }
