@@ -1,11 +1,32 @@
 import { useMemo, useRef, useState } from 'react';
 import { Card, Chip, Donut, ProgressBar, SectionLabel, Term } from './ui';
 import { fmt, fmt0 } from '../lib/format';
-import { BUDGET_CATEGORIES, catById, isSpendCategory } from '../data/budget';
+import { BUDGET_CATEGORIES, CATEGORY_GROUPS, catById, categoriesFor, isHouseCategory, isSpendCategory } from '../data/budget';
+import { PROPERTY_DEFAULTS } from '../data/property';
 import { parseStatement, isCashAccount } from '../lib/statements';
 import Cashflow from './Cashflow';
-import Airbnb from './Airbnb';
+import TaxReport from './TaxReport';
 import Rules, { RuleWizard } from './Rules';
+
+// Category picker for a transaction row. Grouped, because a flat list of every
+// personal + house + kept bucket is a long scroll to read.
+function CategorySelect({ value, kind, onChange, className = 'tx-cat', title }) {
+  const options = categoriesFor(kind);
+  return (
+    <select className={className} value={value || 'other'} title={title}
+      onClick={e => e.stopPropagation()} onChange={e => onChange(e.target.value)}>
+      {CATEGORY_GROUPS.map(g => {
+        const inGroup = options.filter(c => c.group === g.id);
+        if (!inGroup.length) return null;
+        return (
+          <optgroup label={g.label} key={g.id}>
+            {inGroup.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
+          </optgroup>
+        );
+      })}
+    </select>
+  );
+}
 
 // Per-account-kind labels + emoji, shared by the profile cards and the import
 // preview so a new source only needs adding in one place.
@@ -99,9 +120,26 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
       .filter(c => c.spent !== 0 || c.budget > 0)
       .sort((a, z) => z.spent - a.spent);
   }, [allExpenses, b.budgets]);
+  // One list, banded by group. The house's costs are real money out of the
+  // account so they belong in the total, but a $6,400 roof sitting between
+  // Groceries and Dining out reads as a household blowout — the band says
+  // whose money this is without changing what it adds up to.
+  const catBands = useMemo(() => CATEGORY_GROUPS
+    .map(g => ({ ...g, rows: catTotals.filter(c => c.group === g.id) }))
+    .filter(g => g.rows.length), [catTotals]);
   // Everything that answers "where did the spending go" — the non-spend rows
   // are still listed, but they can't be a share of a total they're not in.
   const spendCats = useMemo(() => catTotals.filter(c => isSpendCategory(c.id)), [catTotals]);
+
+  // The rental's own P&L, read straight off the categories. This is what the
+  // Airbnb tab used to show; it lives here now because the tagging that fed it
+  // is just the category picker.
+  const house = useMemo(() => {
+    const rows = scoped.filter(t => isHouseCategory(t.category));
+    const income = rows.filter(t => t.kind === 'income').reduce((a, t) => a + t.amount, 0);
+    const spent = rows.filter(t => t.kind === 'expense').reduce((a, t) => a + t.amount, 0);
+    return { count: rows.length, income, spent, net: income - spent };
+  }, [scoped]);
 
   const perAccountSpent = useMemo(() => {
     const m = {};
@@ -203,9 +241,13 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
 
   const hasData = b.transactions.length > 0;
   const allSelected = selectedIds.size === b.accounts.length;
+  const property = b.properties[0] || null;
   // Lines the AI flagged as ambiguous (e.g. a family member's Zelle) and won't
-  // auto-decide — surfaced on the Airbnb tab so they're never missed.
-  const reviewCount = useMemo(() => b.transactions.filter(t => t.reviewFlag).length, [b.transactions]);
+  // auto-decide — surfaced at the top of Spending so they're never missed.
+  const reviewRows = useMemo(
+    () => b.transactions.filter(t => t.reviewFlag).sort((a, z) => z.date.localeCompare(a.date)),
+    [b.transactions]);
+  const reviewCount = reviewRows.length;
 
   const dropzone = (
     <div
@@ -277,13 +319,15 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
 
       {hasData && (
         <>
-          {/* cashflow ⇄ spending ⇄ airbnb */}
+          {/* cashflow ⇄ spending ⇄ taxes ⇄ rules. The house used to have its own
+              tab with its own tagging; it's now just a set of categories inside
+              Spending, so all that's left of it here is the tax report. */}
           <div className="cf-toggle">
             <button className={'cf-toggle-btn' + (view === 'cashflow' ? ' active' : '')} onClick={() => setView('cashflow')}>📊 Cashflow</button>
-            <button className={'cf-toggle-btn' + (view === 'spending' ? ' active' : '')} onClick={() => setView('spending')}>🧾 Spending</button>
-            <button className={'cf-toggle-btn' + (view === 'airbnb' ? ' active' : '')} onClick={() => setView('airbnb')}>
-              🏡 Airbnb{reviewCount > 0 && <span className="cf-review-flag"> · 🔍 {reviewCount}</span>}
+            <button className={'cf-toggle-btn' + (view === 'spending' ? ' active' : '')} onClick={() => setView('spending')}>
+              🧾 Spending{reviewCount > 0 && <span className="cf-review-flag"> · 🔍 {reviewCount}</span>}
             </button>
+            <button className={'cf-toggle-btn' + (view === 'taxes' ? ' active' : '')} onClick={() => setView('taxes')}>🧮 House taxes</button>
             <button className={'cf-toggle-btn' + (view === 'rules' ? ' active' : '')} onClick={() => setView('rules')}>
               🧠 Rules{b.smartRules.length > 0 && <span className="cf-rule-count"> · {b.smartRules.length}</span>}
             </button>
@@ -293,12 +337,70 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
             <Cashflow b={b} portfolioAccounts={portfolioAccounts} onLinkChange={handleLinkChange} />
           )}
 
-          {view === 'airbnb' && <Airbnb b={b} />}
+          {view === 'taxes' && (
+            property
+              ? <TaxReport key={property.id} b={b} property={property} />
+              : (
+                <Card className="airbnb-setup">
+                  <SectionLabel>Set up the rental 🏡</SectionLabel>
+                  <p className="reb-tip" style={{ marginBottom: 14 }}>
+                    Create the property and the House categories on the Spending tab start
+                    feeding a Schedule E summary — depreciation, the mortgage split and a
+                    suggested set-aside. Sorting a transaction into a House bucket is the
+                    only tagging there is.
+                  </p>
+                  <div className="pending-stats">
+                    <Chip tone="soft">🏡 {PROPERTY_DEFAULTS.name}</Chip>
+                    <Chip tone="soft">📍 {PROPERTY_DEFAULTS.state}</Chip>
+                    <Chip tone="soft">🗓️ In service {PROPERTY_DEFAULTS.placedInService}</Chip>
+                    <Chip tone="soft">🏦 {fmt0(PROPERTY_DEFAULTS.purchasePrice)} purchase</Chip>
+                  </div>
+                  <div className="pending-actions" style={{ marginTop: 14 }}>
+                    <button className="btn-soft on" onClick={() => b.addProperty()}>
+                      ✓ Create {PROPERTY_DEFAULTS.name}
+                    </button>
+                  </div>
+                </Card>
+              )
+          )}
 
           {view === 'rules' && <Rules b={b} />}
 
           {view === 'spending' && (
           <>
+          {/* needs manual review — first thing you see, so lines from merchants
+              you flagged as "it depends" never get buried at the bottom */}
+          {reviewCount > 0 && (
+            <Card className="airbnb-review-card">
+              <SectionLabel right={<Chip tone="warn">{reviewCount} to review</Chip>}>Needs manual review 🔍</SectionLabel>
+              <p className="reb-tip" style={{ marginBottom: 10 }}>
+                These come from merchants you flagged as &ldquo;it depends&rdquo; (like family). Nothing
+                is guessed for them — pick a category and this one is filed. New lines from
+                the same merchant keep landing here until you stop reviewing it.
+              </p>
+              <div className="cat-expand" style={{ background: 'transparent', border: 'none', padding: 0 }}>
+                {reviewRows.map(t => {
+                  const acc = b.accounts.find(a => a.id === t.accountId);
+                  return (
+                    <div className="txrow airbnb-review-row" key={t.id}>
+                      <span className="mono tx-date">{dayLabel(t.date)}</span>
+                      <span title={acc?.name}>{acc?.emoji}</span>
+                      <span className="tx-desc">{t.desc}</span>
+                      <span className={'mono tx-amt' + (t.kind === 'income' ? ' up' : '')}>{fmt(t.amount)}</span>
+                      <div className="airbnb-review-acts">
+                        <CategorySelect value={t.category} kind={t.kind}
+                          title="File just this one — the merchant stays in review"
+                          onChange={v => b.resolveReview(t.id, v)} />
+                        <button className="hold-del" title="Stop reviewing this merchant — let it auto-file again"
+                          onClick={() => b.setMerchantReview(t.desc, false)}>✕</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
           {/* account profiles + combine */}
           <div>
             <SectionLabel right={
@@ -413,6 +515,40 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
             </div>
           </Card>
 
+          {/* the rental's own P&L — same transactions, filtered to the House
+              categories, so there's nothing extra to keep in sync */}
+          {house.count > 0 && (
+            <Card className="house-card">
+              <SectionLabel right={
+                <button className="drill-open" type="button" onClick={() => setView('taxes')}>Schedule E view →</button>
+              }>
+                {property ? `${property.emoji} ${property.name}` : '🏡 The house'} · rental cash flow
+              </SectionLabel>
+              <div className="house-pl">
+                <div className="house-stat">
+                  <div className="hs-label">💰 Rent in</div>
+                  <div className="hs-value up">{fmt0(house.income)}</div>
+                </div>
+                <div className="house-stat">
+                  <div className="hs-label">🧾 Costs out</div>
+                  <div className="hs-value">{fmt0(house.spent)}</div>
+                </div>
+                <div className="house-stat">
+                  <div className="hs-label">{house.net < 0 ? '📉 Net loss' : '📈 Net profit'}</div>
+                  <div className={'hs-value ' + (house.net < 0 ? 'down' : 'up')}>{fmt0(house.net)}</div>
+                </div>
+                <div className="house-stat">
+                  <div className="hs-label">🏷️ Lines</div>
+                  <div className="hs-value">{house.count}</div>
+                </div>
+              </div>
+              <p className="reb-tip" style={{ marginTop: 12 }}>
+                Cash in vs. cash out. Depreciation, the mortgage split and the set-aside
+                estimate live in the Schedule E view. 🧾
+              </p>
+            </Card>
+          )}
+
           {/* where it went */}
           <Card>
             <SectionLabel right={
@@ -421,7 +557,15 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
               </button>
             }>Where it went</SectionLabel>
             <div className="cat-list">
-              {catTotals.map(c => {
+              {catBands.map(band => (
+                <div key={band.id} className="cat-band">
+                  {catBands.length > 1 && (
+                    <div className="cat-band-label">
+                      <span>{band.label}</span>
+                      <span className="mono">{fmt0(band.rows.reduce((a, c) => a + c.spent, 0))}</span>
+                    </div>
+                  )}
+              {band.rows.map(c => {
                 const counts = isSpendCategory(c.id);
                 const over = counts && c.budget > 0 && c.spent > c.budget;
                 const pct = c.budget > 0 ? c.spent / c.budget * 100 : (totalSpent ? c.spent / totalSpent * 100 : 0);
@@ -466,13 +610,12 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
                               <span className="mono tx-date">{dayLabel(t.date)}</span>
                               <span title={acc?.name}>{acc?.emoji}</span>
                               <span className="tx-desc">{t.desc}</span>
-                              <select className="tx-cat" value={t.category || 'other'}
-                                onClick={e => e.stopPropagation()}
-                                onChange={e => b.recategorize(t.id, e.target.value)}
-                                title="Filed in the wrong bucket? Move it just this once.">
-                                {BUDGET_CATEGORIES.map(bc => <option key={bc.id} value={bc.id}>{bc.emoji} {bc.name}</option>)}
-                              </select>
+                              <CategorySelect value={t.category} kind={t.kind}
+                                title="Filed in the wrong bucket? Move it just this once."
+                                onChange={v => b.recategorize(t.id, v)} />
                               <span className={'mono tx-amt' + (t.amount < 0 ? ' up' : '')}>{fmt(t.amount)}</span>
+                              <button className="btn-soft tx-rule-btn" title={`Always file "${t.desc.slice(0, 30)}" here — re-files this merchant's past lines too`}
+                                onClick={e => { e.stopPropagation(); b.recategorizeMerchant(t.desc, t.category || 'other'); }}>🧠 Always</button>
                               <button className="btn-soft tx-rule-btn" title="Make a reusable rule from this transaction"
                                 onClick={e => { e.stopPropagation(); setRuleSeed({ desc: t.desc, category: t.category }); }}>✨ Rule</button>
                             </div>
@@ -484,6 +627,8 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
                   </div>
                 );
               })}
+                </div>
+              ))}
               {!catTotals.length && <div className="hold-empty">No expenses in this view — try another month or select more accounts.</div>}
             </div>
           </Card>

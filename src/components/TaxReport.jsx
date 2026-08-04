@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Card, Chip, Donut, SectionLabel, Term } from './ui';
 import { fmt0 } from '../lib/format';
 import { TAX_DEFAULTS, scheduleEById } from '../data/property';
+import { isHouseCategory } from '../data/budget';
 import { sourceById, GLOSSARY_GROUPS } from '../data/taxSources';
 import {
   scheduleESummary, buildingBasis, missingInputs, isReportFinal, setAside,
@@ -90,7 +91,7 @@ export default function TaxReport({ b, property }) {
   // Available tax years = years with tagged transactions + in-service year + now.
   const years = useMemo(() => {
     const s = new Set(
-      b.transactions.filter(t => t.propertyId === property.id).map(t => yearOf(t.date)).filter(Boolean));
+      b.transactions.filter(t => isHouseCategory(t.category)).map(t => yearOf(t.date)).filter(Boolean));
     const inSvc = yearOf(tax.placedInService || property.placedInService);
     if (inSvc) s.add(inSvc);
     s.add(new Date().getFullYear());
