@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Card, Chip, SectionLabel } from './ui';
 import { fmt } from '../lib/format';
-import { BUDGET_CATEGORIES, catById, suggestRulePhrase, smartRuleMatches } from '../data/budget';
-import { SCHEDULE_E_CATEGORIES, scheduleEById, guessScheduleE } from '../data/property';
+import { BUDGET_CATEGORIES, CATEGORY_GROUPS, catById, suggestRulePhrase, smartRuleMatches } from '../data/budget';
 
 // Smart rules — the user-facing "logic builder". A rule is plain English:
-// "when a transaction's description CONTAINS <phrase>, sort it / tag it / review it".
+// "when a transaction's description CONTAINS <phrase>, sort it into <category>
+// — or refuse to guess and send it to review".
 // The wizard (RuleWizard) is reused from the Rules manager and from any
 // transaction row; the manager lists, toggles, edits and deletes the rules.
 
@@ -17,25 +17,14 @@ function draftFrom(seed = {}) {
   return {
     contains: seed.contains ?? (seed.desc ? suggestRulePhrase(seed.desc) : ''),
     category: seed.category ?? null,
-    propertyId: seed.propertyId ?? null,
-    scheduleE: seed.scheduleE ?? null,
     review: seed.review ?? false,
   };
 }
 
 export function RuleWizard({ b, seed = {}, onClose }) {
   const editing = !!seed.id;
-  const properties = b.properties || [];
   const [d, setD] = useState(() => draftFrom(seed));
   const [applyExisting, setApplyExisting] = useState(true);
-
-  const mode = d.review ? 'review' : (d.propertyId ? 'house' : 'none');
-  const setMode = m => setD(s => ({
-    ...s,
-    review: m === 'review',
-    propertyId: m === 'house' ? (s.propertyId || properties[0]?.id || null) : null,
-    scheduleE: m === 'house' ? (s.scheduleE || guessScheduleE(s.category || 'other')) : null,
-  }));
 
   const matches = useMemo(() => {
     if (d.contains.trim().length < 2) return [];
@@ -44,16 +33,15 @@ export function RuleWizard({ b, seed = {}, onClose }) {
       .sort((a, z) => z.date.localeCompare(a.date));
   }, [b.transactions, d.contains]);
 
-  const hasAction = !!d.category || d.review || !!d.propertyId;
+  const hasAction = !!d.category || d.review;
   const canSave = d.contains.trim().length >= 2 && hasAction;
 
   function save() {
     if (!canSave) return;
     const rule = {
       contains: d.contains.trim(),
-      category: d.category || null,
-      propertyId: d.review ? null : (d.propertyId || null),
-      scheduleE: d.review ? null : (d.propertyId ? (d.scheduleE || guessScheduleE(d.category || 'other')) : null),
+      // "always ask" and "always file here" are opposites — a rule can't do both
+      category: d.review ? null : (d.category || null),
       review: d.review,
       enabled: true,
     };
@@ -82,44 +70,40 @@ export function RuleWizard({ b, seed = {}, onClose }) {
           <div className="rw-hint">Not case-sensitive. Keep it short and distinctive — a name or brand works best.</div>
         </div>
 
-        {/* 2 · the category */}
+        {/* 2 · the category — the house buckets are in here too, so filing a
+            transaction and classifying it for tax are the same choice */}
         <div className="rw-step">
-          <div className="rw-q">2 · Sort it into… <span className="rw-opt">(optional)</span></div>
-          <div className="rw-chips">
-            {BUDGET_CATEGORIES.map(c => (
-              <button key={c.id} type="button"
-                className={'rw-chip' + (d.category === c.id ? ' on' : '')}
-                onClick={() => setD(s => ({ ...s, category: s.category === c.id ? null : c.id }))}>
-                {c.emoji} {c.name}
-              </button>
-            ))}
-          </div>
+          <div className="rw-q">2 · Sort it into…</div>
+          {CATEGORY_GROUPS.map(g => {
+            const inGroup = BUDGET_CATEGORIES.filter(c => c.group === g.id && !c.income);
+            if (!inGroup.length) return null;
+            return (
+              <div key={g.id} className="rw-group">
+                <div className="rw-group-label">{g.label}</div>
+                <div className="rw-chips">
+                  {inGroup.map(c => (
+                    <button key={c.id} type="button" disabled={d.review}
+                      className={'rw-chip' + (d.category === c.id ? ' on' : '')}
+                      onClick={() => setD(s => ({ ...s, category: s.category === c.id ? null : c.id }))}>
+                      {c.emoji} {c.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        {/* 3 · the house decision */}
+        {/* 3 · or refuse to guess */}
         <div className="rw-step">
-          <div className="rw-q">3 · Is it for the {properties[0]?.name || 'house'}?</div>
+          <div className="rw-q">3 · …or don’t sort it at all</div>
           <div className="rw-modes">
-            <button type="button" className={'rw-mode' + (mode === 'none' ? ' on' : '')} onClick={() => setMode('none')}>👤 Personal</button>
-            <button type="button" className={'rw-mode' + (mode === 'house' ? ' on' : '')} onClick={() => setMode('house')} disabled={!properties.length}>🏡 House</button>
-            <button type="button" className={'rw-mode' + (mode === 'review' ? ' on' : '')} onClick={() => setMode('review')}>🔍 Always ask me</button>
+            <button type="button" className={'rw-mode' + (!d.review ? ' on' : '')}
+              onClick={() => setD(s => ({ ...s, review: false }))}>✨ Auto-file it</button>
+            <button type="button" className={'rw-mode' + (d.review ? ' on' : '')}
+              onClick={() => setD(s => ({ ...s, review: true, category: null }))}>🔍 Always ask me</button>
           </div>
-          {mode === 'house' && (
-            <div className="rw-house">
-              {properties.length > 1 && (
-                <select className="tx-cat" value={d.propertyId || ''}
-                  onChange={e => setD(s => ({ ...s, propertyId: e.target.value }))}>
-                  {properties.map(p => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
-                </select>
-              )}
-              <select className="tx-cat" value={d.scheduleE || ''}
-                onChange={e => setD(s => ({ ...s, scheduleE: e.target.value }))}>
-                {SCHEDULE_E_CATEGORIES.map(sc => <option key={sc.id} value={sc.id}>{sc.emoji} {sc.name}</option>)}
-              </select>
-            </div>
-          )}
-          {mode === 'review' && <div className="rw-hint">Matching lines land in “Needs manual review” so you decide each one by hand — nothing is auto-tagged.</div>}
-          {!properties.length && <div className="rw-hint">Create a property on the Airbnb tab to enable house tagging.</div>}
+          {d.review && <div className="rw-hint">Matching lines land in “Needs manual review” on the Spending tab so you decide each one by hand — nothing is filed automatically.</div>}
         </div>
 
         {/* live preview */}
@@ -150,7 +134,7 @@ export function RuleWizard({ b, seed = {}, onClose }) {
           <button className="btn-soft" onClick={onClose}>Cancel</button>
         </div>
         {!hasAction && d.contains.trim().length >= 2 && (
-          <div className="rw-hint" style={{ marginTop: 8 }}>Pick at least one action — a category, House, or “Always ask me”.</div>
+          <div className="rw-hint" style={{ marginTop: 8 }}>Pick a category, or “Always ask me”.</div>
         )}
       </div>
     </div>
@@ -161,7 +145,6 @@ function RuleRow({ b, rule, onEdit }) {
   const count = useMemo(
     () => b.transactions.filter(t => smartRuleMatches({ contains: rule.contains, enabled: true }, t)).length,
     [b.transactions, rule.contains]);
-  const prop = b.properties.find(p => p.id === rule.propertyId);
   const off = rule.enabled === false;
   return (
     <div className={'rule-row' + (off ? ' off' : '')}>
@@ -173,8 +156,7 @@ function RuleRow({ b, rule, onEdit }) {
         <div className="rule-acts-row">
           {rule.category && <Chip tone="soft">{catById(rule.category).emoji} {catById(rule.category).name}</Chip>}
           {rule.review && <Chip tone="warn">🔍 Always review</Chip>}
-          {rule.propertyId && <Chip tone="soft">🏡 {prop?.name || 'House'} · {scheduleEById(rule.scheduleE).name}</Chip>}
-          {!rule.category && !rule.review && !rule.propertyId && <span className="rw-hint">no action</span>}
+          {!rule.category && !rule.review && <span className="rw-hint">no action</span>}
         </div>
       </div>
       <span className="rule-count mono" title="Transactions whose description matches right now">{count} match{count === 1 ? '' : 'es'}</span>
@@ -200,14 +182,14 @@ export default function Rules({ b }) {
         </SectionLabel>
         <p className="reb-tip" style={{ marginBottom: 12 }}>
           Teach the budget your own logic. A rule reads in plain English — “when the description
-          <strong> contains</strong> a phrase, sort it into a category, tag it to the house, or send it to review.”
+          <strong> contains</strong> a phrase, sort it into a category — or send it to review instead.”
           Rules run on every import and you can apply them to what’s already here. They’re checked
           before the built-in keywords, so your logic always wins.
         </p>
         {rules.length === 0 && (
           <div className="hold-empty">
             No rules yet. Tap <strong>✨ New rule</strong>, or hit <strong>✨ Rule</strong> on any transaction
-            in Spending to build one from a real example (like a Zelle to your lawn guy → 🏠 Home / House).
+            in Spending to build one from a real example (like a Zelle to your lawn guy → 🔧 House · Repairs).
           </div>
         )}
         {rules.length > 0 && (

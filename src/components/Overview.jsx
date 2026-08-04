@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { CATEGORIES, REGIONS, bucketOf } from '../data/portfolio';
-import { Card, CatDot, Chip, Donut, ProgressBar, SectionLabel, Term } from './ui';
+import { useEffect, useRef, useState } from 'react';
+import { CATEGORIES, REGIONS, bucketOf, categoryById } from '../data/portfolio';
+import { Card, CatDot, Chip, Donut, ProgressBar, RegionBadge, SectionLabel, Term } from './ui';
 import { fmt, fmt0 } from '../lib/format';
 
 const GOAL_KEY = 'sg_goal';
@@ -23,7 +23,9 @@ function greeting() {
   return 'Good evening, you two 🌙';
 }
 
-export default function Overview({ holdings, categoryTotals, regionTotals, fxRate, setFxRate, onCategoryClick, accounts, derivedAccounts = [], addAccount, updateAccount, removeAccount, onManageBudget }) {
+const fmtQty = n => n.toLocaleString('en-US', { maximumFractionDigits: 5 });
+
+export default function Overview({ holdings, categoryTotals, regionTotals, holdingValue, holdingCost, fxRate, setFxRate, onCategoryClick, accounts, derivedAccounts = [], addAccount, updateAccount, removeAccount, onManageBudget }) {
   const totals = categoryTotals();
   const byRegion = regionTotals();
   const totalVal = Object.values(totals).reduce((a, t) => a + t.value, 0);
@@ -65,7 +67,7 @@ export default function Overview({ holdings, categoryTotals, regionTotals, fxRat
   // anything, so it doesn't compete for a slice here; it gets its own stat
   // instead (see the hero above).
   const ownedSlices = CATEGORIES
-    .map(c => ({ id: c.id, color: c.color, value: totals[c.id].value }))
+    .map(c => ({ id: c.id, name: c.name, color: c.color, value: totals[c.id].value }))
     .filter(s => s.value > 0);
   const slices = ownedSlices.length ? ownedSlices : [{ id: 'none', color: 'var(--accent-soft)', value: 1 }];
 
@@ -79,6 +81,63 @@ export default function Overview({ holdings, categoryTotals, regionTotals, fxRat
     .map(r => ({ ...r, value: byRegion[r.id].value }))
     .filter(r => r.value > 0)
     .sort((a, b) => b.value - a.value);
+
+  // ── Chart ⇄ list linkage ───────────────────────────────────────────────
+  // Hovering the ring previews a category in the panel beside it; clicking pins
+  // it so you can read the list without keeping the pointer still. Hover always
+  // wins over the pin, so you can peek at a neighbour and fall back to what's
+  // pinned when you leave.
+  const [hoverCat, setHoverCat] = useState(null);
+  const [pinnedCat, setPinnedCat] = useState(null);
+  const [rowCat, setRowCat] = useState(null);
+  // After a click that un-pins, the pointer is still sitting on the wedge —
+  // without this the hover preview would light it straight back up and the
+  // click would look like it did nothing.
+  const mutedRef = useRef(null);
+  const activeCat = hoverCat ?? pinnedCat;
+  // Rows only tint the ring; they never swap the panel out from under the
+  // cursor (that would delete the very thing you were pointing at).
+  const ringCat = activeCat ?? rowCat;
+
+  const onHover = id => {
+    if (id == null) { mutedRef.current = null; setHoverCat(null); return }
+    if (mutedRef.current === id) return;
+    setHoverCat(id);
+  };
+  const onPick = id => {
+    if (pinnedCat === id) {
+      mutedRef.current = id;
+      setPinnedCat(null);
+      setHoverCat(null);
+    } else {
+      mutedRef.current = null;
+      setPinnedCat(id);
+      setHoverCat(id);
+    }
+  };
+  const clearCat = () => { mutedRef.current = null; setPinnedCat(null); setHoverCat(null) };
+
+  useEffect(() => {
+    if (!pinnedCat) return;
+    const onKey = e => { if (e.key === 'Escape') clearCat() };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pinnedCat]);
+
+  const activeInfo = activeCat ? categoryById(activeCat) : null;
+  const activeTotals = activeCat ? totals[activeCat] : null;
+  const activeShare = activeTotals && totalVal > 0 ? (activeTotals.value / totalVal * 100) : 0;
+  // Owned first and biggest-first; the ones still on the wish list trail behind
+  // so the card doubles as "what's left to start".
+  const activeHoldings = activeCat
+    ? holdings
+        .filter(h => h.category === activeCat)
+        .map(h => ({ ...h, val: holdingValue(h), cst: holdingCost(h) }))
+        .sort((a, b) => b.val - a.val || String(a.ticker).localeCompare(String(b.ticker)))
+    : [];
+  // A dimmed legend entry has no wedge to light up, so don't ask the ring to
+  // highlight something that isn't drawn — that would just dim everything.
+  const ringActiveId = slices.some(s => s.id === ringCat) ? ringCat : null;
 
   return (
     <div className="screen">
@@ -155,26 +214,17 @@ export default function Overview({ holdings, categoryTotals, regionTotals, fxRat
           <SectionLabel right={<Chip>{ownedCount} investments owned</Chip>}>
             <Term tip="How your invested money is split between different types of investments.">Allocation</Term>
           </SectionLabel>
-          <div className="alloc-body">
+          <div className="alloc-stage">
             <Donut
               slices={slices}
-              centerTop={fmt0(totalVal)}
-              centerBottom="invested"
+              size={236}
+              activeId={ringActiveId}
+              onSliceHover={onHover}
+              onSliceClick={onPick}
+              ariaLabel="Investment mix by category — hover a slice to see what's in it"
+              centerTop={activeInfo ? fmt0(activeTotals.value) : fmt0(totalVal)}
+              centerBottom={activeInfo ? activeInfo.name : 'invested'}
             />
-            <div className="alloc-note">
-              <div className="alloc-legend">
-                {sortedCategories.map(c => (
-                  <span className={'legend-item' + (totals[c.id].value > 0 ? '' : ' legend-empty')} key={c.id}>
-                    <CatDot color={c.color} /> {c.name}
-                  </span>
-                ))}
-              </div>
-              <p className="alloc-line">
-                {diversified
-                  ? <>Money spread across {slices.length} categories — the <b>Rebalance</b> tab shows how close you are to the mix you chose. 🦩</>
-                  : <>All eggs in one basket for now — the <b>Rebalance</b> tab has the plan to spread new money around. Every color here is a future win. 🦩</>}
-              </p>
-            </div>
           </div>
 
           {regionSlices.length > 0 && (
@@ -201,32 +251,123 @@ export default function Overview({ holdings, categoryTotals, regionTotals, fxRat
               </div>
             </div>
           )}
+
+          {/* Legend + prose live under the chart: the ring is the headline here,
+              and the legend doubles as the keyboard/pointer handle for the
+              slivers that are too thin to hover. */}
+          <div className="alloc-foot">
+            <div className="alloc-legend">
+              {sortedCategories.map(c => (
+                <button type="button" key={c.id}
+                  className={'legend-item alloc-legend-btn'
+                    + (totals[c.id].value > 0 ? '' : ' legend-empty')
+                    + (activeCat === c.id ? ' on' : '')}
+                  title={`Show the ${c.name} investments`}
+                  onMouseEnter={() => onHover(c.id)}
+                  onMouseLeave={() => onHover(null)}
+                  onFocus={() => onHover(c.id)}
+                  onBlur={() => onHover(null)}
+                  onClick={() => onPick(c.id)}>
+                  <CatDot color={c.color} /> {c.name}
+                </button>
+              ))}
+            </div>
+            <p className="alloc-line">
+              {diversified
+                ? <>Money spread across {slices.length} categories — the <b>Rebalance</b> tab shows how close you are to the mix you chose. 🦩</>
+                : <>All eggs in one basket for now — the <b>Rebalance</b> tab has the plan to spread new money around. Every color here is a future win. 🦩</>}
+            </p>
+            <p className="alloc-hint">
+              {pinnedCat
+                ? 'Pinned — click it again (or press Esc) to let go.'
+                : 'Hover a slice to see what\'s inside it; click to pin it.'}
+            </p>
+          </div>
         </Card>
 
         <Card>
-          <SectionLabel>By category</SectionLabel>
-          <div className="cat-list">
-            {sortedCategories.map(c => {
-              const t = totals[c.id];
-              const catPnl = t.value - t.cost;
-              return (
-                <div className="cat-row clickable" key={c.id} onClick={() => onCategoryClick?.(c.id)}
-                  title={`Click to see the ${c.name} investments`}>
-                  <CatDot color={c.color} />
-                  <div className="cat-name">
-                    <span><Term tip={c.blurb}>{c.name}</Term></span>
-                    <span className="cat-sub">{t.owned} owned · {t.count} on the list</span>
-                  </div>
-                  <div className="cat-vals">
-                    <div className="cat-value">{fmt(t.value)}</div>
-                    <div className={'cat-pl ' + (t.value === 0 ? 'flat' : catPnl < 0 ? 'down' : catPnl > 0 ? 'up' : 'flat')}>
-                      {t.value === 0 ? 'ready to start' : `${fmt(catPnl, { plus: true })} · ${(t.cost > 0 ? (catPnl / t.cost * 100) : 0).toFixed(1)}%`}
+          {activeInfo ? (
+            <>
+              <SectionLabel right={
+                <>
+                  <Chip tone="soft">{activeShare.toFixed(1)}% of invested</Chip>
+                  {pinnedCat === activeCat && (
+                    <button className="drill-open" type="button" onClick={clearCat} title="Unpin (Esc)">✕ unpin</button>
+                  )}
+                </>
+              }>
+                <span className="drill-head">
+                  <CatDot color={activeInfo.color} size={11} />
+                  <span className="drill-title">{activeInfo.name}</span>
+                </span>
+              </SectionLabel>
+              <p className="drill-blurb">{activeInfo.blurb}</p>
+              <div className="drill-list">
+                {activeHoldings.length === 0 && (
+                  <div className="hold-empty">Nothing on the list here yet — add one on the Holdings tab.</div>
+                )}
+                {activeHoldings.map(h => {
+                  const owned = (h.shares || 0) > 0;
+                  const pnl = h.val - h.cst;
+                  return (
+                    <div className={'drill-row' + (owned ? '' : ' is-empty')} key={h.id}>
+                      <div className="drill-id">
+                        <span className="drill-top">
+                          <span className="drill-ticker">{h.ticker}</span>
+                          <RegionBadge region={h.region} size="sm" />
+                          <span className="drill-name">{h.name}</span>
+                        </span>
+                        <span className="drill-sub">
+                          {owned ? `${fmtQty(h.shares)} × ${fmt(h.price || 0)}` : 'not started yet'}
+                        </span>
+                      </div>
+                      <div className="drill-vals">
+                        <div className="drill-value">{owned ? fmt(h.val) : '—'}</div>
+                        <div className={'drill-pl ' + (!owned ? 'flat' : pnl < 0 ? 'down' : pnl > 0 ? 'up' : 'flat')}>
+                          {owned
+                            ? `${fmt(pnl, { plus: true })} · ${(h.cst > 0 ? (pnl / h.cst * 100) : 0).toFixed(1)}%`
+                            : 'on the list'}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+              <div className="drill-foot">
+                <span className="cat-sub">{activeTotals.owned} owned · {activeTotals.count} on the list</span>
+                <button className="drill-open" type="button" onClick={() => onCategoryClick?.(activeCat)}>
+                  Open in Holdings →
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <SectionLabel>By category</SectionLabel>
+              <div className="cat-list">
+                {sortedCategories.map(c => {
+                  const t = totals[c.id];
+                  const catPnl = t.value - t.cost;
+                  return (
+                    <div className="cat-row clickable" key={c.id} onClick={() => onCategoryClick?.(c.id)}
+                      onMouseEnter={() => setRowCat(c.id)} onMouseLeave={() => setRowCat(null)}
+                      title={`Click to see the ${c.name} investments`}>
+                      <CatDot color={c.color} />
+                      <div className="cat-name">
+                        <span><Term tip={c.blurb}>{c.name}</Term></span>
+                        <span className="cat-sub">{t.owned} owned · {t.count} on the list</span>
+                      </div>
+                      <div className="cat-vals">
+                        <div className="cat-value">{fmt(t.value)}</div>
+                        <div className={'cat-pl ' + (t.value === 0 ? 'flat' : catPnl < 0 ? 'down' : catPnl > 0 ? 'up' : 'flat')}>
+                          {t.value === 0 ? 'ready to start' : `${fmt(catPnl, { plus: true })} · ${(t.cost > 0 ? (catPnl / t.cost * 100) : 0).toFixed(1)}%`}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </Card>
       </div>
 

@@ -2,23 +2,104 @@
 // Rules are checked in order — put more specific matches (H-E-B PHARMACY,
 // UBER *EATS) before the broader ones they'd otherwise fall into.
 
+// One list, three jobs. A transaction is sorted exactly once, and the category
+// it lands in decides everything downstream:
+//
+//   group: 'personal' — ordinary household spending
+//   group: 'house'    — the rental. `scheduleE` names the tax line it feeds,
+//                       which is what lets the Taxes view be built from the
+//                       same choice instead of a second round of tagging.
+//   group: 'kept'     — `spend: false`: money that left the account but is
+//                       still ours. Kept out of the Spent total and its budget
+//                       maths, or a $3,000 brokerage deposit would read as a
+//                       $3,000 shopping spree.
 export const BUDGET_CATEGORIES = [
-  { id: 'home',          emoji: '🏠', name: 'Home & utilities', color: '#E8A03E' },
-  { id: 'groceries',     emoji: '🛒', name: 'Groceries',        color: '#3E9B8F' },
-  { id: 'dining',        emoji: '🌮', name: 'Dining out',       color: '#E07856' },
-  { id: 'transport',     emoji: '🚗', name: 'Transport & gas',  color: '#6FA8C9' },
-  { id: 'subscriptions', emoji: '📺', name: 'Subscriptions',    color: '#E5B45E' },
-  { id: 'shopping',      emoji: '🛍️', name: 'Shopping',         color: '#9C8EC9' },
-  { id: 'health',        emoji: '🩺', name: 'Health & fitness', color: '#7BB686' },
-  { id: 'fun',           emoji: '🎢', name: 'Fun & travel',     color: '#D98BB6' },
-  { id: 'people',        emoji: '🤝', name: 'Friends & family', color: '#8FAE9B' },
-  { id: 'fees',          emoji: '🏛️', name: 'Fees & interest',  color: '#B0876B' },
-  { id: 'other',         emoji: '🧺', name: 'Everything else',  color: '#A8A29A' },
+  { id: 'home',          emoji: '🏠', name: 'Home & utilities', color: '#E8A03E', group: 'personal' },
+  { id: 'groceries',     emoji: '🛒', name: 'Groceries',        color: '#3E9B8F', group: 'personal' },
+  { id: 'dining',        emoji: '🌮', name: 'Dining out',       color: '#E07856', group: 'personal' },
+  { id: 'transport',     emoji: '🚗', name: 'Transport & gas',  color: '#6FA8C9', group: 'personal' },
+  { id: 'subscriptions', emoji: '📺', name: 'Subscriptions',    color: '#E5B45E', group: 'personal' },
+  { id: 'shopping',      emoji: '🛍️', name: 'Shopping',         color: '#9C8EC9', group: 'personal' },
+  { id: 'health',        emoji: '🩺', name: 'Health & fitness', color: '#7BB686', group: 'personal' },
+  { id: 'fun',           emoji: '🎢', name: 'Fun & travel',     color: '#D98BB6', group: 'personal' },
+  { id: 'people',        emoji: '🤝', name: 'Friends & family', color: '#8FAE9B', group: 'personal' },
+  { id: 'fees',          emoji: '🏛️', name: 'Fees & interest',  color: '#B0876B', group: 'personal' },
+
+  // ── the rental ────────────────────────────────────────────────────────
+  // Each one is a Schedule E line wearing a friendly name. Picking the
+  // category IS the tax classification — there is no second step.
+  { id: 'house_income',    emoji: '💰', name: 'House · Rental income',   color: '#3E9B8F', group: 'house', income: true },
+  { id: 'house_mortgage',  emoji: '🏡', name: 'House · Mortgage',        color: '#C9A24B', group: 'house', scheduleE: 'mortgage' },
+  { id: 'house_tax',       emoji: '🏛️', name: 'House · Property tax',    color: '#C98B6B', group: 'house', scheduleE: 'taxes' },
+  { id: 'house_insurance', emoji: '🛡️', name: 'House · Insurance',       color: '#7BB686', group: 'house', scheduleE: 'insurance' },
+  { id: 'house_utilities', emoji: '💡', name: 'House · Utilities',       color: '#D98BB6', group: 'house', scheduleE: 'utilities' },
+  { id: 'house_repairs',   emoji: '🔧', name: 'House · Repairs',         color: '#E07856', group: 'house', scheduleE: 'repairs' },
+  { id: 'house_improve',   emoji: '🔨', name: 'House · Improvements',    color: '#B5774E', group: 'house', scheduleE: 'improvements',
+    blurb: 'Capital work — a new roof, a renovation. Added to the property\'s basis and depreciated, never expensed in one year.' },
+  { id: 'house_cleaning',  emoji: '🧽', name: 'House · Cleaning & turnover', color: '#3E9B8F', group: 'house', scheduleE: 'cleaning' },
+  { id: 'house_supplies',  emoji: '🧺', name: 'House · Supplies',        color: '#A89C8A', group: 'house', scheduleE: 'supplies' },
+  { id: 'house_fees',      emoji: '🤝', name: 'House · Host & mgmt fees', color: '#8FAE9B', group: 'house', scheduleE: 'commissions' },
+  { id: 'house_other',     emoji: '🧾', name: 'House · Other',           color: '#A8A29A', group: 'house', scheduleE: 'other' },
+  { id: 'house_cpa',       emoji: '🚧', name: 'House · Ask the CPA',     color: '#C08552', group: 'house', scheduleE: 'unclassified',
+    blurb: 'Genuinely ambiguous. Held out of the deduction totals until a CPA rules on it, rather than force-fit into a line.' },
+
+  { id: 'investing',     emoji: '📈', name: 'Investing & saving', color: '#2A7A70', group: 'kept', spend: false,
+    blurb: 'Money moved to a brokerage or savings account — still yours, just working. Kept out of the spending total.' },
+  { id: 'other',         emoji: '🧺', name: 'Everything else',  color: '#A8A29A', group: 'personal' },
 ]
 
-export const catById = id => BUDGET_CATEGORIES.find(c => c.id === id) || BUDGET_CATEGORIES[BUDGET_CATEGORIES.length - 1]
+export const CATCH_ALL = 'other'
+export const catById = id =>
+  BUDGET_CATEGORIES.find(c => c.id === id) || BUDGET_CATEGORIES.find(c => c.id === CATCH_ALL)
+
+// Does this category count as money spent? Everything does unless it says
+// otherwise, so a category added later is spending by default.
+export const isSpendCategory = id => catById(id).spend !== false
+
+// ── the rental ────────────────────────────────────────────────────────────
+// One property today, so a house category implies which property. If a second
+// one is ever added it needs its own dimension — the category alone can't say.
+export const isHouseCategory = id => catById(id).group === 'house'
+export const HOUSE_CATEGORIES = BUDGET_CATEGORIES.filter(c => c.group === 'house')
+export const HOUSE_EXPENSE_CATEGORIES = HOUSE_CATEGORIES.filter(c => !c.income)
+// Which Schedule E line a category feeds. 'other' for a house category with no
+// explicit mapping; null for anything that isn't the rental's at all.
+export const scheduleELineFor = id => {
+  const c = catById(id)
+  return c.group === 'house' ? (c.scheduleE || 'other') : null
+}
+// Expense categories offerable for a transaction of this kind. Rental income
+// has a category too, and it must not show up in an expense picker.
+export const categoriesFor = kind =>
+  BUDGET_CATEGORIES.filter(c => (kind === 'income' ? c.income : !c.income))
+
+export const CATEGORY_GROUPS = [
+  { id: 'personal', label: 'Personal' },
+  { id: 'house',    label: 'The house (rental)' },
+  { id: 'kept',     label: 'Kept, not spent' },
+]
+
+// Money headed to an investment / brokerage account isn't spent — it's still
+// yours, just working. We recognize the usual destinations by description.
+// Heuristic and easily extended; a tagged-account model can supersede it later.
+// Lives here rather than next to the statement parsers because it is
+// categorization knowledge, and the parsers already depend on this module.
+const INVESTMENT_DESTINATIONS = /WEALTHFRONT|FIDELITY|VANGUARD|SCHWAB|ROBINHOOD|COINBASE|KRAKEN|INTERACTIVE BROKERS|\bIBKR\b|BETTERMENT|ETRADE|E\*TRADE|TD AMERITRADE|ACORNS|MERRILL|SOFI INVEST|WEBULL|BINANCE\.US|BINANCE US|BROKERAGE/i
+export const isInvestmentTransfer = desc => INVESTMENT_DESTINATIONS.test(String(desc || ''))
 
 const RULES = [
+  // investing first: a brokerage ACH must never fall into a spending bucket
+  [INVESTMENT_DESTINATIONS, 'investing'],
+
+  // The rental, before the personal buckets that would otherwise claim these.
+  // Only the unmistakable ones auto-file — the mortgage servicer and the
+  // platform fees. A hardware-store run or a plumber could be either house or
+  // home, so those stay personal until a rule or a click says otherwise.
+  // The servicer line is the FULL payment (principal + interest + escrowed
+  // tax/insurance); the Taxes view splits it from the 1098 and escrow figures.
+  [/SERVICEMAC/i, 'house_mortgage'],
+  [/AIRBNB.*(FEE|COMMISSION|SERVICE)|VRBO.*(FEE|COMMISSION)|\bHOSPITABLE\b|\bGUESTY\b|\bTURNO\b|\bPRICELABS\b/i, 'house_fees'],
+
   // health first: "H-E-B PHARMACY" must not fall into groceries
   [/PHARMACY|CVS|WALGREEN|ORTHO|SURG|BAYLOR|MEDICAL|DENTAL|CLINIC|HOSPITAL|URGENT|LABCORP|QUEST DIAG|OPTOMETR|DERMATOL/i, 'health'],
   [/FIT CONNECT|FITNESS|PLANET FIT|GYM|LA FITNESS|EQUINOX|CROSSFIT|YOGA/i, 'health'],

@@ -7,6 +7,31 @@
 
 ---
 
+## ⚠️ Superseded: the two-axis tagging model is gone
+
+This document describes attribution as a **second axis**: sort a transaction into
+a budget category, then separately tag it to a property and pick its Schedule E
+line. That was two rounds of bookkeeping on the same transaction, and it has been
+folded into one.
+
+Today the **House categories in `src/data/budget.js` are the attribution**. Each
+one names the Schedule E line it feeds (`scheduleE`), so choosing
+`🔧 House · Repairs` on the Spending tab is simultaneously the budget decision and
+the tax classification. There is no separate Airbnb tab, no `tagTransaction`, and
+no per-transaction `propertyId` / `scheduleE` — `scheduleESummary()` reads
+categories. What survives from this plan, and is still accurate:
+
+- everything about the **tax engine** (depreciation, the 1098/escrow mortgage
+  split, the passive-loss and §280A flags, the set-aside estimate)
+- the **merchant memory** — flagging an ambiguous vendor for manual review, and
+  "always file this merchant here", which now teaches a category instead of a tag
+- the **Schedule E line list** in `src/data/property.js`, which is what the Taxes
+  view reports on
+
+Read the sections below with that substitution in mind.
+
+---
+
 ## The Situation (in plain words)
 
 Matheus & Melanie moved to Florida and now rent out their house in **Texas** on

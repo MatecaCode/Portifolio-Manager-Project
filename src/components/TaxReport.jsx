@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Card, Chip, Donut, SectionLabel, Term } from './ui';
 import { fmt0 } from '../lib/format';
 import { TAX_DEFAULTS, scheduleEById } from '../data/property';
+import { isHouseCategory } from '../data/budget';
 import { sourceById, GLOSSARY_GROUPS } from '../data/taxSources';
 import {
   scheduleESummary, buildingBasis, missingInputs, isReportFinal, setAside,
@@ -90,7 +91,7 @@ export default function TaxReport({ b, property }) {
   // Available tax years = years with tagged transactions + in-service year + now.
   const years = useMemo(() => {
     const s = new Set(
-      b.transactions.filter(t => t.propertyId === property.id).map(t => yearOf(t.date)).filter(Boolean));
+      b.transactions.filter(t => isHouseCategory(t.category)).map(t => yearOf(t.date)).filter(Boolean));
     const inSvc = yearOf(tax.placedInService || property.placedInService);
     if (inSvc) s.add(inSvc);
     s.add(new Date().getFullYear());
@@ -319,7 +320,7 @@ export default function TaxReport({ b, property }) {
         </div>
         <div className="hero-right budget-donut-wrap">
           {summary.totalExpenses > 0
-            ? <Donut size={150} centerTop={fmt0(summary.totalExpenses)} centerBottom="expenses"
+            ? <Donut size={163} centerTop={fmt0(summary.totalExpenses)} centerBottom="expenses"
                 slices={summary.lines.map(l => ({ id: l.id, color: lineColor(l.id), value: l.amount }))} />
             : <div className="hold-empty">No deductible expenses tagged for {year} yet.</div>}
         </div>

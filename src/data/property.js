@@ -1,6 +1,10 @@
-// Property / Airbnb module data: Schedule E expense lines, attribution rules,
-// and the merchant-memory helpers that power one-tap tagging + learning.
+// Property / Airbnb module data: Schedule E lines, the property's tax-engine
+// inputs, and the merchant-key helper the learned rules are built on.
 // See AIRBNB_MODULE_PLAN.md for the full design.
+//
+// Filing a transaction to the house is no longer a second step — the House
+// categories in data/budget.js each name the Schedule E line they feed, so the
+// lines below are what the Taxes view *reports*, not what the user picks.
 
 // Schedule E (Form 1040) deductible-expense lines for a residential rental,
 // plus two practical buckets for this household:
@@ -117,35 +121,5 @@ export function merchantKey(desc) {
     .trim()
 }
 
-// Unmistakable house expenses we can auto-tag on import without asking.
-// The mortgage servicer line is the FULL payment (principal + interest +
-// escrowed tax/insurance) — file it under 'mortgage' and split it at tax time.
-const AUTO_EXPENSE_RULES = [
-  [/SERVICEMAC|MORTGAGE/i, 'mortgage'],
-]
-
-export function suggestScheduleE(desc) {
-  for (const [re, id] of AUTO_EXPENSE_RULES) if (re.test(desc)) return id
-  return null
-}
-
 // Airbnb payouts land as deposits — recognize them as rental income.
 export const isAirbnbIncome = desc => /AIRBNB/i.test(String(desc || ''))
-
-// When a user one-taps "tag to house" on a transaction, guess a starting
-// Schedule E line from its personal spending category (they can refine it).
-const CAT_TO_SCHEDULE_E = {
-  home:          'utilities',
-  subscriptions: 'utilities',
-  transport:     'auto_travel',
-  groceries:     'supplies',
-  shopping:      'supplies',
-  fees:          'other',
-  health:        'other',
-  dining:        'other',
-  fun:           'other',
-  people:        'other',
-  other:         'other',
-}
-
-export const guessScheduleE = cat => CAT_TO_SCHEDULE_E[cat] || 'other'
