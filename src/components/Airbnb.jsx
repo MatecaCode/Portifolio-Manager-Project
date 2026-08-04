@@ -231,7 +231,7 @@ export default function Airbnb({ b }) {
           {expenses > 0 ? (
             <Donut
               slices={bySE.map(c => ({ id: c.id, color: c.color, value: c.spent }))}
-              size={150}
+              size={163}
               centerTop={fmt0(expenses)}
               centerBottom="expenses"
             />

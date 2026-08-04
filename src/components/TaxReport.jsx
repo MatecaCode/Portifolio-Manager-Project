@@ -319,7 +319,7 @@ export default function TaxReport({ b, property }) {
         </div>
         <div className="hero-right budget-donut-wrap">
           {summary.totalExpenses > 0
-            ? <Donut size={150} centerTop={fmt0(summary.totalExpenses)} centerBottom="expenses"
+            ? <Donut size={163} centerTop={fmt0(summary.totalExpenses)} centerBottom="expenses"
                 slices={summary.lines.map(l => ({ id: l.id, color: lineColor(l.id), value: l.amount }))} />
             : <div className="hold-empty">No deductible expenses tagged for {year} yet.</div>}
         </div>

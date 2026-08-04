@@ -370,7 +370,7 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
             <div className="hero-right budget-donut-wrap">
               <Donut
                 slices={catTotals.filter(c => c.spent > 0).map(c => ({ id: c.id, color: c.color, value: c.spent }))}
-                size={150}
+                size={163}
                 centerTop={fmt0(totalSpent)}
                 centerBottom={activeMonth === 'all' ? 'all time' : 'this month'}
               />

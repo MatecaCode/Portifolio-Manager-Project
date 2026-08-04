@@ -88,22 +88,81 @@ export function ProgressBar({ pct, marker, tone = 'accent', height = 8 }) {
   );
 }
 
-export function Donut({ slices, size = 190, hole = 0.62, centerTop, centerBottom, onSliceClick }) {
+// The ring is drawn as SVG arcs rather than a conic-gradient so each wedge is
+// its own element — that's what lets a slice be hovered, focused and clicked
+// on its own, and lets the chart drive a detail panel beside it.
+// `activeId` is controlled from outside so a legend row (or a table row) can
+// light up the same wedge the pointer would.
+export function Donut({
+  slices, size = 190, hole = 0.62, centerTop, centerBottom,
+  activeId = null, onSliceHover, onSliceClick, ariaLabel,
+}) {
   const total = slices.reduce((s, x) => s + x.value, 0) || 1;
-  const stops = slices.map((s, i) => {
-    const before = slices.slice(0, i).reduce((a, x) => a + x.value, 0);
-    const from = (before / total) * 100;
-    const to = ((before + s.value) / total) * 100;
-    return `${s.color} ${from}% ${to}%`;
-  }).join(', ');
+  // Geometry lives in a 0–100 viewBox. `pad` is the headroom the active wedge
+  // grows into, so a pop-out is never clipped by the box.
+  const pad = 4;
+  const R = 50 - pad;          // outer radius at rest
+  const w = R * (1 - hole);    // ring thickness
+  const inner = R - w;         // where the hole begins
+  const live = !!(onSliceHover || onSliceClick);
+  // A hairline of space between wedges reads as separate pieces without needing
+  // a stroke the background colour would have to match.
+  const gapFrac = slices.length > 1 ? 1.6 / 360 : 0;
+
+  const arcs = slices.map((s, i) => ({
+    ...s,
+    frac: s.value / total,
+    start: slices.slice(0, i).reduce((a, x) => a + x.value, 0) / total,
+  }));
+
+  // Dash maths depends on the radius the wedge is drawn at, and the active one
+  // rides a bigger radius — so this is a function, not a constant. The pattern
+  // is `len (C - len)`: exactly one circumference, so a wedge that runs past
+  // 12 o'clock wraps to the start instead of being cut off.
+  const dash = (arc, r) => {
+    const c = 2 * Math.PI * r;
+    const len = Math.min(Math.max((arc.frac - gapFrac) * c, 0.6), c);
+    return { r, strokeDasharray: `${len} ${c - len}`, strokeDashoffset: -arc.start * c };
+  };
+
+  const pick = (e, id) => { e.stopPropagation(); onSliceClick(id); };
+
   return (
-    <div
-      className="donut"
-      style={{ width: size, height: size, background: `conic-gradient(${stops})`, cursor: onSliceClick ? 'pointer' : undefined }}
-      onClick={onSliceClick}
-      title={onSliceClick ? 'Click to see the holdings' : undefined}
-    >
-      <div className="donut-hole" style={{ width: size * hole, height: size * hole }}>
+    <div className="donut" style={{ width: size, height: size }}>
+      <svg viewBox="0 0 100 100" className="donut-svg" role="img" aria-label={ariaLabel || 'Allocation ring'}>
+        {/* 0° is 3 o'clock in SVG; the rotate puts the first wedge at the top */}
+        <g transform="rotate(-90 50 50)">
+          {arcs.map(a => {
+            const on = a.id === activeId;
+            const geo = dash(a, on ? inner + (w + pad) / 2 : inner + w / 2);
+            return (
+              <circle
+                key={a.id} cx="50" cy="50" fill="none"
+                r={geo.r} stroke={a.color} strokeWidth={on ? w + pad : w}
+                strokeDasharray={geo.strokeDasharray} strokeDashoffset={geo.strokeDashoffset}
+                className={'donut-arc'
+                  + (live ? ' is-live' : '')
+                  + (activeId != null && !on ? ' is-dim' : '')}
+                tabIndex={live ? 0 : undefined}
+                role={onSliceClick ? 'button' : undefined}
+                onMouseEnter={onSliceHover ? () => onSliceHover(a.id) : undefined}
+                onMouseLeave={onSliceHover ? () => onSliceHover(null) : undefined}
+                onFocus={onSliceHover ? () => onSliceHover(a.id) : undefined}
+                onBlur={onSliceHover ? () => onSliceHover(null) : undefined}
+                onClick={onSliceClick ? e => pick(e, a.id) : undefined}
+                onKeyDown={onSliceClick ? e => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(e, a.id) }
+                } : undefined}
+              >
+                {a.name && <title>{a.name} — {(a.frac * 100).toFixed(1)}%</title>}
+              </circle>
+            );
+          })}
+        </g>
+      </svg>
+      {/* The hole is genuinely empty now, so this is just the label plate. It
+          must not swallow pointer events aimed at the ring behind it. */}
+      <div className="donut-hole" style={{ width: size * inner * 2 / 100, height: size * inner * 2 / 100 }}>
         {centerTop && <div className="donut-top">{centerTop}</div>}
         {centerBottom && <div className="donut-bottom">{centerBottom}</div>}
       </div>
