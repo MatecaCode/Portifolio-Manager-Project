@@ -1,9 +1,33 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { merchantKey, suggestScheduleE, isAirbnbIncome, guessScheduleE, PROPERTY_DEFAULTS, TAX_DEFAULTS } from '../data/property'
-import { smartRuleMatches } from '../data/budget'
+import { smartRuleMatches, isInvestmentTransfer } from '../data/budget'
 
 const LS_KEY = 'budget_v1'
+
+// Bumped whenever the category list learns something that changes where
+// already-imported transactions belong. The stamp lives in `budgets` because
+// that column is free-form JSON — no schema change needed to record it.
+const SCHEMA = 2
+
+// Re-file transactions that predate a category the app has since learned about.
+// Only ever touches lines still sitting in the catch-all bucket, and the stamp
+// stops it re-running once anything has been saved — so a line you deliberately
+// moved afterwards is never dragged back.
+function migrateBudget(state) {
+  const from = state.budgets?.schema || 1
+  if (from >= SCHEMA) return state
+  let transactions = state.transactions || []
+  if (from < 2) {
+    // "Investing & saving" arrived after these were imported, so brokerage
+    // ACHs are sitting in "Everything else", inflating the spending total.
+    transactions = transactions.map(t =>
+      t.kind === 'expense' && (!t.category || t.category === 'other') && isInvestmentTransfer(t.desc)
+        ? { ...t, category: 'investing' }
+        : t)
+  }
+  return { ...state, transactions, budgets: { ...(state.budgets || {}), schema: SCHEMA } }
+}
 
 function lsLoad() {
   try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : null } catch { return null }
@@ -98,10 +122,11 @@ export function useBudget() {
           const { data, error } = await supabase
             .from('budget_state').select('*').eq('id', 'shared').single()
           if (!error && data) {
+            const m = migrateBudget({ transactions: data.transactions || [], budgets: data.budgets || {} })
             setAccounts(data.accounts || [])
             setStatements(data.statements || [])
-            setTransactions(data.transactions || [])
-            setBudgets(data.budgets || {})
+            setTransactions(m.transactions)
+            setBudgets(m.budgets)
             setProperties(data.properties || [])
             setPropertyRules(data.property_rules || [])
             setSmartRules(data.smart_rules || [])
@@ -113,10 +138,11 @@ export function useBudget() {
       }
       const saved = lsLoad()
       if (saved) {
+        const m = migrateBudget({ transactions: saved.transactions || [], budgets: saved.budgets || {} })
         setAccounts(saved.accounts || [])
         setStatements(saved.statements || [])
-        setTransactions(saved.transactions || [])
-        setBudgets(saved.budgets || {})
+        setTransactions(m.transactions)
+        setBudgets(m.budgets)
         setProperties(saved.properties || [])
         setPropertyRules(saved.propertyRules || [])
         setSmartRules(saved.smartRules || [])

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Card, Chip, Donut, ProgressBar, SectionLabel, Term } from './ui';
 import { fmt, fmt0 } from '../lib/format';
-import { BUDGET_CATEGORIES, catById } from '../data/budget';
+import { BUDGET_CATEGORIES, catById, isSpendCategory } from '../data/budget';
 import { parseStatement, isCashAccount } from '../lib/statements';
 import Cashflow from './Cashflow';
 import Airbnb from './Airbnb';
@@ -33,12 +33,16 @@ const dayLabel = d => `${d.slice(5, 7)}/${d.slice(8, 10)}`;
 
 function summarizeParsed(parsed) {
   const n = { expense: 0, income: 0, transfer: 0 };
-  let spend = 0;
+  let spend = 0, kept = 0, keptCount = 0;
   for (const t of parsed.transactions) {
     n[t.kind]++;
-    if (t.kind === 'expense') spend += t.amount;
+    if (t.kind !== 'expense') continue;
+    // Brokerage/savings moves land as expenses on the statement but aren't
+    // spending — call them out separately so the preview total is honest.
+    if (isSpendCategory(t.category)) spend += t.amount;
+    else { kept += t.amount; keptCount++; n.expense--; }
   }
-  return { ...n, spend };
+  return { ...n, spend, kept, keptCount };
 }
 
 export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) {
@@ -76,24 +80,36 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
     () => activeMonth === 'all' ? scopedAll : scopedAll.filter(t => monthOf(t) === activeMonth),
     [scopedAll, activeMonth]);
 
-  const expenses = useMemo(() => scoped.filter(t => t.kind === 'expense'), [scoped]);
+  // Money can leave an account without being spent — a brokerage or savings
+  // move is still ours. Those categories get their own line rather than being
+  // folded into "Spent", where a single $3,000 deposit would read as a blowout.
+  const allExpenses = useMemo(() => scoped.filter(t => t.kind === 'expense'), [scoped]);
+  const expenses = useMemo(() => allExpenses.filter(t => isSpendCategory(t.category)), [allExpenses]);
+  const moved = useMemo(() => allExpenses.filter(t => !isSpendCategory(t.category)), [allExpenses]);
   const totalSpent = expenses.reduce((a, t) => a + t.amount, 0);
+  const totalMoved = moved.reduce((a, t) => a + t.amount, 0);
   const totalIncome = scoped.filter(t => t.kind === 'income').reduce((a, t) => a + t.amount, 0);
   const transferCount = scoped.filter(t => t.kind === 'transfer').length;
 
   const catTotals = useMemo(() => {
     const m = {};
-    for (const t of expenses) m[t.category || 'other'] = (m[t.category || 'other'] || 0) + t.amount;
+    for (const t of allExpenses) m[t.category || 'other'] = (m[t.category || 'other'] || 0) + t.amount;
     return BUDGET_CATEGORIES
       .map(c => ({ ...c, spent: m[c.id] || 0, budget: b.budgets.perCat?.[c.id] || 0 }))
       .filter(c => c.spent !== 0 || c.budget > 0)
       .sort((a, z) => z.spent - a.spent);
-  }, [expenses, b.budgets]);
+  }, [allExpenses, b.budgets]);
+  // Everything that answers "where did the spending go" — the non-spend rows
+  // are still listed, but they can't be a share of a total they're not in.
+  const spendCats = useMemo(() => catTotals.filter(c => isSpendCategory(c.id)), [catTotals]);
 
   const perAccountSpent = useMemo(() => {
     const m = {};
     const pool = activeMonth === 'all' ? b.transactions : b.transactions.filter(t => monthOf(t) === activeMonth);
-    for (const t of pool) if (t.kind === 'expense') m[t.accountId] = (m[t.accountId] || 0) + t.amount;
+    for (const t of pool) {
+      if (t.kind !== 'expense' || !isSpendCategory(t.category)) continue;
+      m[t.accountId] = (m[t.accountId] || 0) + t.amount;
+    }
     return m;
   }, [b.transactions, activeMonth]);
 
@@ -103,9 +119,10 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
   const tips = useMemo(() => {
     const out = [];
     if (!expenses.length) return out;
-    const top = catTotals[0];
+    const top = spendCats[0];
     if (top) out.push({ emoji: top.emoji, text: `${top.name} is the biggest bucket — ${fmt0(top.spent)} (${Math.round(top.spent / totalSpent * 100)}% of spending).` });
-    const over = catTotals.filter(c => c.budget > 0 && c.spent > c.budget);
+    if (totalMoved > 0) out.push({ emoji: '📈', text: `${fmt0(totalMoved)} moved into investments and savings — that's money kept, not spent.` });
+    const over = spendCats.filter(c => c.budget > 0 && c.spent > c.budget);
     for (const c of over.slice(0, 2)) out.push({ emoji: '🚨', text: `${c.name} ran ${fmt0(c.spent - c.budget)} over its ${fmt0(c.budget)} budget. One lighter week next month closes that gap.` });
     const biggest = [...expenses].sort((a, z) => z.amount - a.amount)[0];
     if (biggest && biggest.amount > totalSpent * 0.15) out.push({ emoji: '🐘', text: `Biggest single expense: ${fmt(biggest.amount)} at "${biggest.desc.slice(0, 38)}" (${dayLabel(biggest.date)}).` });
@@ -115,7 +132,7 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
     if (rec) out.push({ emoji: '🔁', text: `"${rec[0]}" showed up ${rec[1].length}× (${fmt0(rec[1].reduce((a, x) => a + x, 0))} total) — small swipes add up.` });
     if (totalBudget > 0 && totalSpent < totalBudget) out.push({ emoji: '📈', text: `${fmt0(totalBudget - totalSpent)} under budget so far — that’s money that can flow straight into the portfolio next door.` });
     return out.slice(0, 4);
-  }, [expenses, catTotals, totalSpent, totalBudget]);
+  }, [expenses, spendCats, totalSpent, totalMoved, totalBudget]);
 
   // ── file handling ──
   async function handleFiles(fileList) {
@@ -368,14 +385,23 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
               </div>
             </div>
             <div className="hero-right budget-donut-wrap">
+              {/* the ring is the spending total, so the non-spend buckets stay
+                  out of it — otherwise the slices wouldn't add up to the middle */}
               <Donut
-                slices={catTotals.filter(c => c.spent > 0).map(c => ({ id: c.id, color: c.color, value: c.spent }))}
+                slices={spendCats.filter(c => c.spent > 0).map(c => ({ id: c.id, name: c.name, color: c.color, value: c.spent }))}
                 size={163}
                 centerTop={fmt0(totalSpent)}
                 centerBottom={activeMonth === 'all' ? 'all time' : 'this month'}
               />
               <div className="budget-flow">
                 {totalIncome > 0 && <div className="hs-sub">💰 Income in: <strong className="mono up">{fmt0(totalIncome)}</strong></div>}
+                {totalMoved > 0 && (
+                  <div className="hs-sub">
+                    <Term tip="Money moved to a brokerage or savings account. It left the checking account but it's still yours, so it isn't counted as spending.">
+                      📈 Invested &amp; saved: <strong className="mono up">{fmt0(totalMoved)}</strong>
+                    </Term>
+                  </div>
+                )}
                 {transferCount > 0 && (
                   <div className="hs-sub">
                     <Term tip="Card payments and moves between your own accounts. Excluded from spending so the same dollar never counts twice.">
@@ -396,35 +422,39 @@ export default function Budget({ b, portfolioAccounts = [], syncAccountValue }) 
             }>Where it went</SectionLabel>
             <div className="cat-list">
               {catTotals.map(c => {
-                const over = c.budget > 0 && c.spent > c.budget;
+                const counts = isSpendCategory(c.id);
+                const over = counts && c.budget > 0 && c.spent > c.budget;
                 const pct = c.budget > 0 ? c.spent / c.budget * 100 : (totalSpent ? c.spent / totalSpent * 100 : 0);
                 const open = openCat === c.id;
-                const catTxs = open ? expenses.filter(t => (t.category || 'other') === c.id).sort((a, z) => z.date.localeCompare(a.date)) : [];
+                const catTxs = open ? allExpenses.filter(t => (t.category || 'other') === c.id).sort((a, z) => z.date.localeCompare(a.date)) : [];
                 return (
                   <div key={c.id}>
-                    <div className={'cat-row clickable'} onClick={() => setOpenCat(open ? null : c.id)} title="Click to see every transaction">
+                    <div className={'cat-row clickable' + (counts ? '' : ' cat-row-kept')} onClick={() => setOpenCat(open ? null : c.id)} title="Click to see every transaction">
                       <span className="budget-cat-emoji">{c.emoji}</span>
                       <div className="cat-name">
                         {c.name}
                         <span className="cat-sub">
-                          {c.budget > 0
-                            ? (over ? `${fmt0(c.spent - c.budget)} over the ${fmt0(c.budget)} budget` : `${fmt0(c.budget - c.spent)} left of ${fmt0(c.budget)}`)
-                            : `${Math.round(pct)}% of spending`}
+                          {!counts
+                            ? 'kept, not spent — outside the spending total'
+                            : c.budget > 0
+                              ? (over ? `${fmt0(c.spent - c.budget)} over the ${fmt0(c.budget)} budget` : `${fmt0(c.budget - c.spent)} left of ${fmt0(c.budget)}`)
+                              : `${Math.round(pct)}% of spending`}
                         </span>
                       </div>
-                      {editBudgets ? (
+                      {editBudgets && counts ? (
                         <input className="bgt-input mono" type="number" placeholder="—" defaultValue={c.budget || ''}
                           onClick={e => e.stopPropagation()}
                           onBlur={e => b.setCategoryBudget(c.id, e.target.value)}
                           onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()} />
                       ) : (
                         <div className="budget-cat-bar">
-                          <ProgressBar pct={pct} height={8} tone={over ? 'down' : 'accent'} />
+                          {counts && <ProgressBar pct={pct} height={8} tone={over ? 'down' : 'accent'} />}
                         </div>
                       )}
                       <div className="cat-vals">
                         <div className="cat-value">{fmt0(c.spent)}</div>
-                        {c.budget > 0 && <div className={'cat-pl ' + (over ? 'down' : 'up')}>{Math.round(c.spent / c.budget * 100)}% of budget</div>}
+                        {counts && c.budget > 0 && <div className={'cat-pl ' + (over ? 'down' : 'up')}>{Math.round(c.spent / c.budget * 100)}% of budget</div>}
+                        {!counts && <div className="cat-pl flat">kept</div>}
                       </div>
                     </div>
                     {open && (
@@ -531,6 +561,7 @@ function PendingPreview({ item, accounts, onConfirm, onCancel }) {
       </p>
       <div className="pending-stats">
         {s.expense > 0 && <Chip tone="soft">🧾 {s.expense} expenses · {fmt0(s.spend)}</Chip>}
+        {s.keptCount > 0 && <Chip tone="soft">📈 {s.keptCount} invested/saved · {fmt0(s.kept)}</Chip>}
         {s.income > 0 && <Chip tone="soft">💰 {s.income} income</Chip>}
         {s.transfer > 0 && <Chip tone="soft">🔁 {s.transfer} transfers (excluded)</Chip>}
         {isCashAccount(p.kind) && p.endingBalance != null && <Chip tone="soft">🏦 Balance {fmt0(p.endingBalance)}</Chip>}

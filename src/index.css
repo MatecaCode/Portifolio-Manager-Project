@@ -868,6 +868,10 @@ body[data-mode="budget"] .brand-sun { background: #FFF3D6; }
 
 /* ---------- budget screen ---------- */
 .budget-cat-emoji { font-size: 19px; width: 30px; text-align: center; flex-shrink: 0; }
+/* A category whose money was kept rather than spent — sits in the same list so
+   it stays clickable, but reads as apart from the spending it isn't part of. */
+.cat-row-kept { background: var(--accent-faint); border-radius: 8px; }
+.cat-row-kept .cat-value { color: var(--accent-deep); }
 .budget-cat-bar { width: 200px; flex-shrink: 0; }
 .budget-step-title { font-weight: 700; font-size: 14.5px; margin-bottom: 3px; }
 .budget-donut-wrap { align-items: center; gap: 14px; }

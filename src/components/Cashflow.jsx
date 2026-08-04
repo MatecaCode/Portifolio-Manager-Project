@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Card, Chip, SectionLabel, Term } from './ui';
 import { fmt, fmt0 } from '../lib/format';
-import { isInvestmentTransfer, isCashAccount } from '../lib/statements';
+import { isCashAccount } from '../lib/statements';
+import { isSpendCategory } from '../data/budget';
 
 // The Cashflow view — the bird's-eye companion to the detailed Spending view.
 // Where Spending answers "what did we buy?", this answers "are we keeping more
@@ -84,7 +85,9 @@ export default function Cashflow({ b, portfolioAccounts = [], onLinkChange }) {
       const ym = monthOf(t);
       if (!set.has(ym)) continue;
       if (t.kind === 'income') m[ym].income += t.amount;
-      else if (isInvestmentTransfer(t.desc)) m[ym].invested += t.amount;
+      // The category decides, not the description — so re-filing a line on the
+      // Spending tab moves it here too, instead of the two views disagreeing.
+      else if (t.kind === 'expense' && !isSpendCategory(t.category)) m[ym].invested += t.amount;
       else if (t.kind === 'expense') m[ym].expense += t.amount;
     }
     return months.map(ym => ({ ym, ...m[ym], net: m[ym].income - m[ym].expense }));

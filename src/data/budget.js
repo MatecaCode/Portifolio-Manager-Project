@@ -2,6 +2,10 @@
 // Rules are checked in order — put more specific matches (H-E-B PHARMACY,
 // UBER *EATS) before the broader ones they'd otherwise fall into.
 
+// `spend: false` marks a category whose money isn't gone — it moved somewhere
+// that's still yours. Those categories are kept out of the "Spent" total and
+// its budget maths, and reported on their own line instead. Without that, a
+// $3,000 transfer into the brokerage would read as a $3,000 shopping spree.
 export const BUDGET_CATEGORIES = [
   { id: 'home',          emoji: '🏠', name: 'Home & utilities', color: '#E8A03E' },
   { id: 'groceries',     emoji: '🛒', name: 'Groceries',        color: '#3E9B8F' },
@@ -13,12 +17,29 @@ export const BUDGET_CATEGORIES = [
   { id: 'fun',           emoji: '🎢', name: 'Fun & travel',     color: '#D98BB6' },
   { id: 'people',        emoji: '🤝', name: 'Friends & family', color: '#8FAE9B' },
   { id: 'fees',          emoji: '🏛️', name: 'Fees & interest',  color: '#B0876B' },
+  { id: 'investing',     emoji: '📈', name: 'Investing & saving', color: '#2A7A70', spend: false,
+    blurb: 'Money moved to a brokerage or savings account — still yours, just working. Kept out of the spending total.' },
   { id: 'other',         emoji: '🧺', name: 'Everything else',  color: '#A8A29A' },
 ]
 
 export const catById = id => BUDGET_CATEGORIES.find(c => c.id === id) || BUDGET_CATEGORIES[BUDGET_CATEGORIES.length - 1]
 
+// Does this category count as money spent? Everything does unless it says
+// otherwise, so a category added later is spending by default.
+export const isSpendCategory = id => catById(id).spend !== false
+
+// Money headed to an investment / brokerage account isn't spent — it's still
+// yours, just working. We recognize the usual destinations by description.
+// Heuristic and easily extended; a tagged-account model can supersede it later.
+// Lives here rather than next to the statement parsers because it is
+// categorization knowledge, and the parsers already depend on this module.
+const INVESTMENT_DESTINATIONS = /WEALTHFRONT|FIDELITY|VANGUARD|SCHWAB|ROBINHOOD|COINBASE|KRAKEN|INTERACTIVE BROKERS|\bIBKR\b|BETTERMENT|ETRADE|E\*TRADE|TD AMERITRADE|ACORNS|MERRILL|SOFI INVEST|WEBULL|BINANCE\.US|BINANCE US|BROKERAGE/i
+export const isInvestmentTransfer = desc => INVESTMENT_DESTINATIONS.test(String(desc || ''))
+
 const RULES = [
+  // investing first: a brokerage ACH must never fall into a spending bucket
+  [INVESTMENT_DESTINATIONS, 'investing'],
+
   // health first: "H-E-B PHARMACY" must not fall into groceries
   [/PHARMACY|CVS|WALGREEN|ORTHO|SURG|BAYLOR|MEDICAL|DENTAL|CLINIC|HOSPITAL|URGENT|LABCORP|QUEST DIAG|OPTOMETR|DERMATOL/i, 'health'],
   [/FIT CONNECT|FITNESS|PLANET FIT|GYM|LA FITNESS|EQUINOX|CROSSFIT|YOGA/i, 'health'],
