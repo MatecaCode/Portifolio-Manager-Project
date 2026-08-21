@@ -25,7 +25,7 @@ function greeting() {
 
 const fmtQty = n => n.toLocaleString('en-US', { maximumFractionDigits: 5 });
 
-export default function Overview({ holdings, categoryTotals, regionTotals, holdingValue, holdingCost, fxRate, setFxRate, onCategoryClick, accounts, derivedAccounts = [], addAccount, updateAccount, removeAccount, onManageBudget }) {
+export default function Overview({ holdings, categoryTotals, regionTotals, holdingValue, holdingCost, fxRate, setFxRate, onCategoryClick, accounts, derivedAccounts = [], addAccount, updateAccount, removeAccount, onManageRental }) {
   const totals = categoryTotals();
   const byRegion = regionTotals();
   const totalVal = Object.values(totals).reduce((a, t) => a + t.value, 0);
@@ -387,17 +387,17 @@ export default function Overview({ holdings, categoryTotals, regionTotals, holdi
           const known = acc.value != null;
           return (
             <Card className="acct-card acct-card-linked" key={acc.id}
-              title="This balance comes straight from the statements you import on the Budget side — it updates itself, so there's nothing to type here.">
+              title="This balance comes straight from the statements you import on the Rental side — it updates itself, so there's nothing to type here.">
               <div className="acct-head">
                 <span className="acct-name-static">🏦 {acc.label}</span>
                 {known
-                  ? <Chip tone="soft"><Term tip="The closing balance of this account's most recent imported statement. Import a newer one on the Budget tab and this updates automatically.">📄 from statements</Term></Chip>
-                  : <Chip tone="warn"><Term tip="This account's statements were imported before balance tracking existed, so no closing balance was captured. Re-import the statement on the Budget tab (remove it, then drop the PDF again) and the balance will appear here and update on its own.">⚠ needs re-import</Term></Chip>}
+                  ? <Chip tone="soft"><Term tip="The closing balance of this account's most recent imported statement. Import a newer one on the Rental tab and this updates automatically.">📄 from statements</Term></Chip>
+                  : <Chip tone="warn"><Term tip="This account's statements were imported before balance tracking existed, so no closing balance was captured. Re-import the statement on the Rental tab (remove it, then drop the PDF again) and the balance will appear here and update on its own.">⚠ needs re-import</Term></Chip>}
               </div>
-              <div className="acct-note-static">{known ? acc.note : 'Re-import this statement on the Budget tab to capture its balance'}</div>
+              <div className="acct-note-static">{known ? acc.note : 'Re-import this statement on the Rental tab to capture its balance'}</div>
               <div className="acct-value acct-value-static">{known ? fmt(acc.value) : '—'}</div>
               <button className="acct-manage" type="button" title="Manage statements for this account"
-                onClick={() => onManageBudget?.()}>Manage in Budget →</button>
+                onClick={() => onManageRental?.()}>Manage in Rental →</button>
             </Card>
           );
         })}
@@ -427,7 +427,7 @@ export default function Overview({ holdings, categoryTotals, regionTotals, holdi
               ))}
             </div>
             <div className="acct-value"
-              title="Balances are updated by hand for now — type the current balance here, or import a statement on the Budget tab to track a bank account automatically.">
+              title="Balances are updated by hand for now — type the current balance here, or import a statement on the Rental tab to track a bank account automatically.">
               $<input className="acct-value-input" type="number" step="0.01" value={acc.value || ''} placeholder="0.00"
                 onChange={e => updateAccount(acc.id, 'value', e.target.value)} />
             </div>

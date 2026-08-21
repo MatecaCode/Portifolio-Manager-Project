@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Card, Chip, SectionLabel } from './ui';
 import { fmt } from '../lib/format';
-import { BUDGET_CATEGORIES, CATEGORY_GROUPS, catById, suggestRulePhrase, smartRuleMatches } from '../data/budget';
+import { CATEGORY_GROUPS, categoriesFor, catById, suggestRulePhrase, smartRuleMatches } from '../data/house';
 
 // Smart rules — the user-facing "logic builder". A rule is plain English:
-// "when a transaction's description CONTAINS <phrase>, sort it into <category>
+// "when a transaction's description CONTAINS <phrase>, file it into <category>
 // — or refuse to guess and send it to review".
 // The wizard (RuleWizard) is reused from the Rules manager and from any
 // transaction row; the manager lists, toggles, edits and deletes the rules.
@@ -70,12 +70,12 @@ export function RuleWizard({ b, seed = {}, onClose }) {
           <div className="rw-hint">Not case-sensitive. Keep it short and distinctive — a name or brand works best.</div>
         </div>
 
-        {/* 2 · the category — the house buckets are in here too, so filing a
+        {/* 2 · the bucket — a House bucket IS the Schedule E line, so filing a
             transaction and classifying it for tax are the same choice */}
         <div className="rw-step">
-          <div className="rw-q">2 · Sort it into…</div>
+          <div className="rw-q">2 · File it as…</div>
           {CATEGORY_GROUPS.map(g => {
-            const inGroup = BUDGET_CATEGORIES.filter(c => c.group === g.id && !c.income);
+            const inGroup = categoriesFor('expense').filter(c => c.group === g.id);
             if (!inGroup.length) return null;
             return (
               <div key={g.id} className="rw-group">
@@ -96,14 +96,14 @@ export function RuleWizard({ b, seed = {}, onClose }) {
 
         {/* 3 · or refuse to guess */}
         <div className="rw-step">
-          <div className="rw-q">3 · …or don’t sort it at all</div>
+          <div className="rw-q">3 · …or don’t file it at all</div>
           <div className="rw-modes">
             <button type="button" className={'rw-mode' + (!d.review ? ' on' : '')}
               onClick={() => setD(s => ({ ...s, review: false }))}>✨ Auto-file it</button>
             <button type="button" className={'rw-mode' + (d.review ? ' on' : '')}
               onClick={() => setD(s => ({ ...s, review: true, category: null }))}>🔍 Always ask me</button>
           </div>
-          {d.review && <div className="rw-hint">Matching lines land in “Needs manual review” on the Spending tab so you decide each one by hand — nothing is filed automatically.</div>}
+          {d.review && <div className="rw-hint">Matching lines land in “Needs manual review” on the house tab so you decide each one by hand — nothing is filed automatically.</div>}
         </div>
 
         {/* live preview */}
@@ -134,7 +134,7 @@ export function RuleWizard({ b, seed = {}, onClose }) {
           <button className="btn-soft" onClick={onClose}>Cancel</button>
         </div>
         {!hasAction && d.contains.trim().length >= 2 && (
-          <div className="rw-hint" style={{ marginTop: 8 }}>Pick a category, or “Always ask me”.</div>
+          <div className="rw-hint" style={{ marginTop: 8 }}>Pick a bucket, or “Always ask me”.</div>
         )}
       </div>
     </div>
@@ -181,15 +181,15 @@ export default function Rules({ b }) {
           Smart rules 🧠
         </SectionLabel>
         <p className="reb-tip" style={{ marginBottom: 12 }}>
-          Teach the budget your own logic. A rule reads in plain English — “when the description
-          <strong> contains</strong> a phrase, sort it into a category — or send it to review instead.”
+          Teach the app your own logic. A rule reads in plain English — “when the description
+          <strong> contains</strong> a phrase, file it into a bucket — or send it to review instead.”
           Rules run on every import and you can apply them to what’s already here. They’re checked
           before the built-in keywords, so your logic always wins.
         </p>
         {rules.length === 0 && (
           <div className="hold-empty">
             No rules yet. Tap <strong>✨ New rule</strong>, or hit <strong>✨ Rule</strong> on any transaction
-            in Spending to build one from a real example (like a Zelle to your lawn guy → 🔧 House · Repairs).
+            on the house tab to build one from a real example (like a Zelle to your lawn guy → 🔧 House · Repairs).
           </div>
         )}
         {rules.length > 0 && (

@@ -3,7 +3,7 @@
 // See AIRBNB_MODULE_PLAN.md for the full design.
 //
 // Filing a transaction to the house is no longer a second step — the House
-// categories in data/budget.js each name the Schedule E line they feed, so the
+// categories in data/house.js each name the Schedule E line they feed, so the
 // lines below are what the Taxes view *reports*, not what the user picks.
 
 // Schedule E (Form 1040) deductible-expense lines for a residential rental,

@@ -2,7 +2,7 @@ import { Chip } from './ui'
 
 const MODES = [
   { id: 'portfolio', label: '📊 Portfolio' },
-  { id: 'budget',    label: '💸 Budget'    },
+  { id: 'rental',    label: '🏡 Rental'    },
 ]
 
 export default function Header({ priceStatus, syncStatus, lastUpdated, onRefresh, mode, setMode, onSignOut }) {
@@ -31,7 +31,7 @@ export default function Header({ priceStatus, syncStatus, lastUpdated, onRefresh
         </div>
       </div>
       <div className="topbar-right">
-        <div className="platform-switch" title="Switch between the investing side (Portfolio) and the spending side (Budget).">
+        <div className="platform-switch" title="Switch between the investing side (Portfolio) and the Texas house (Rental).">
           {MODES.map(m => (
             <button key={m.id} type="button"
               className={'platform-btn' + (mode === m.id ? ' active' : '')}
@@ -46,7 +46,7 @@ export default function Header({ priceStatus, syncStatus, lastUpdated, onRefresh
             {syncLabel}
           </Chip>
         )}
-        {mode !== 'budget' && (
+        {mode !== 'rental' && (
           <button className={'chip chip-btn ' + (priceStatus === 'partial' || priceStatus === 'error' ? 'chip-warn' : 'chip-up')}
             onClick={onRefresh}
             title={priceStatus === 'partial' || priceStatus === 'error'

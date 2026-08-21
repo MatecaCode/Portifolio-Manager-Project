@@ -2,14 +2,14 @@ import { useMemo, useState } from 'react';
 import { Card, Chip, Donut, SectionLabel, Term } from './ui';
 import { fmt0 } from '../lib/format';
 import { TAX_DEFAULTS, scheduleEById } from '../data/property';
-import { isHouseCategory } from '../data/budget';
-import { sourceById, GLOSSARY_GROUPS } from '../data/taxSources';
+import { isHouseCategory } from '../data/house';
+import { sourceById, GLOSSARY_GROUPS, DEDUCTION_WATCHLIST } from '../data/taxSources';
 import {
   scheduleESummary, buildingBasis, missingInputs, isReportFinal, setAside,
   personalUseFlag, palAllowance, niitApplies, shortTermExceptionPossible, yearOf,
 } from '../lib/tax';
 
-// The Taxes view — Phase 3. Turns the property's tagged transactions + a handful
+// The Taxes view — Phase 3. Turns the property's filed transactions + a handful
 // of once-a-year inputs (basis, Form 1098, escrow) into a Schedule E year-end
 // summary, a depreciation schedule, a set-aside estimate, and a panel of CPA
 // flags. Everything is framed as an estimate pending CPA review — see
@@ -72,6 +72,39 @@ function SourceModal({ id, onClose }) {
           <button className="btn-soft" onClick={onClose}>Close</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// One "keep an eye out" deduction: a nudge you can read in a second, which opens
+// into what it is, why it qualifies, and the .gov page that says so. Collapsed by
+// default — the point is to be skimmable, not to be another wall of tax text.
+function WatchRow({ item }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={'ded-item' + (open ? ' open' : '')}>
+      <button type="button" className="ded-sum" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+        <span className="ded-emoji">{item.emoji}</span>
+        <span className="ded-teaser">{item.teaser}</span>
+        <span className="ded-chev">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="ded-body">
+          <div className="ded-block">
+            <div className="ded-h">What it is</div>
+            <p>{item.what}</p>
+          </div>
+          <div className="ded-block">
+            <div className="ded-h">Why it qualifies</div>
+            <p>{item.why}</p>
+          </div>
+          <div className="tax-source-links">
+            {item.authority.map((a, i) => (
+              <a key={i} className="tax-source-link" href={a.url} target="_blank" rel="noopener noreferrer">🔗 {a.label}</a>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -344,7 +377,7 @@ export default function TaxReport({ b, property }) {
               <div className="cat-vals"><div className="cat-value mono">{fmt0(l.amount)}</div></div>
             </div>
           ))}
-          {!summary.lines.length && <div className="hold-empty">Nothing tagged for {year} yet — tag expenses on the Overview tab.</div>}
+          {!summary.lines.length && <div className="hold-empty">Nothing filed for {year} yet — find the house’s costs on the 🏡 house tab.</div>}
           <div className="cat-row tax-total-row"><span className="tax-line-no mono">L20</span><div className="cat-name">Total expenses</div><div className="cat-vals"><div className="cat-value mono">{fmt0(summary.totalExpenses)}</div></div></div>
           <div className="cat-row tax-total-row"><span className="tax-line-no mono">L21</span><div className="cat-name">{summary.net < 0 ? 'Net loss' : 'Net income'}</div><div className="cat-vals"><div className={'cat-value mono ' + (summary.net < 0 ? 'down' : 'up')}>{fmt0(summary.net)}</div></div></div>
         </div>
@@ -537,6 +570,24 @@ export default function TaxReport({ b, property }) {
             })}
           </div>
         ))}
+      </Card>
+
+      {/* deductions to keep an eye out for — the ones with no bank line to file */}
+      <Card>
+        <SectionLabel right={<Chip tone="soft">{DEDUCTION_WATCHLIST.length} to watch</Chip>}>Keep an eye out 👀</SectionLabel>
+        <p className="reb-tip" style={{ marginBottom: 14 }}>
+          Everything above is built from money that moved through the bank. These are the
+          deductions that <em>don’t</em> show up as a transaction — the miles, the elections,
+          the paperwork — plus the ones hiding inside a line you already filed. Tap any one
+          for what it is, why it counts, and the IRS page that says so.
+        </p>
+        <div className="ded-list">
+          {DEDUCTION_WATCHLIST.map(item => <WatchRow key={item.id} item={item} />)}
+        </div>
+        <p className="reb-tip" style={{ marginTop: 12 }}>
+          Same rule as everywhere else here: these show the deduction <em>exists</em>. Whether it
+          fits your year is your CPA’s call. 🧾
+        </p>
       </Card>
 
       {/* confirm gate */}

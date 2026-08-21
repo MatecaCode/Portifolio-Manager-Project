@@ -1,11 +1,24 @@
 # Airbnb & Tax Module — Plan & Vision
 
-> Companion to CONCEPT.md. Captures the plan for a property-focused section inside
-> Budget mode: tracking the Airbnb (the Texas house we moved out of and now rent),
-> its profit/loss, and a real federal tax estimate.
-> Status: **planning / brainstorm** — not yet built. Last updated: June 15, 2026.
+> Companion to CONCEPT.md. Captures the plan for the Airbnb (the Texas house we
+> moved out of and now rent), its profit/loss, and a real federal tax estimate.
+> Status: **Phases 0–3 shipped.** Last updated: August 20, 2026.
 
 ---
+
+## ⚠️ Superseded twice — read this first
+
+**August 2026: the spending side is gone.** This document was written when the
+rental lived inside a budgeting app. That app no longer exists — household
+spending moved to Rocket Money, and everything about personal categories,
+budgets, spending totals, the donut and the Coach's corner was removed. What
+remains is this module, promoted to be the whole non-portfolio half of the app
+(🏡 Rental in the header). Statements are still imported, but only to find the
+house's transactions and to capture bank balances for net worth. Every other
+transaction is a single 👤 Personal bucket that is never totalled or reported.
+
+Wherever the text below says "the Spending tab", read "the 🏡 house tab"; where
+it says "the personal budget", read "👤 Personal, which is a dead end".
 
 ## ⚠️ Superseded: the two-axis tagging model is gone
 
@@ -14,10 +27,10 @@ a budget category, then separately tag it to a property and pick its Schedule E
 line. That was two rounds of bookkeeping on the same transaction, and it has been
 folded into one.
 
-Today the **House categories in `src/data/budget.js` are the attribution**. Each
+Today the **House buckets in `src/data/house.js` are the attribution**. Each
 one names the Schedule E line it feeds (`scheduleE`), so choosing
-`🔧 House · Repairs` on the Spending tab is simultaneously the budget decision and
-the tax classification. There is no separate Airbnb tab, no `tagTransaction`, and
+`🔧 House · Repairs` on the 🏡 house tab is simultaneously the bookkeeping decision
+and the tax classification. There is no separate Airbnb tab, no `tagTransaction`, and
 no per-transaction `propertyId` / `scheduleE` — `scheduleESummary()` reads
 categories. What survives from this plan, and is still accurate:
 
@@ -291,14 +304,22 @@ Honey/Sea-Glass theme — no new design language.
 |---|---|---|
 | **0 — Foundations** | `properties[]` entity, transaction `propertyId`/`scheduleE` fields, property switcher | ✅ **Built** |
 | **1 — Attribution** | Auto-tag (mortgage + Airbnb deposits), one-tap manual tagging, merchant-memory learning, "find house expenses" search | ✅ **Built** |
-| **2 — Airbnb dashboard** | Net cash-flow hero + expenses-by-Schedule-E breakdown (Revenue/Expenses detail + projections still to come) | ◐ **Partial** (cash-flow P&L live) |
-| **3 — Tax engine** | Schedule E calc, depreciation, set-aside helper, property-tax tracker, CPA flags + disclaimers | ⬜ Next |
-| **4 — Polish & future** | Airbnb CSV import, projections, occupancy tax tracker, multi-property polish, reviews/business metrics | ⬜ Later |
+| **2 — Airbnb dashboard** | Net cash-flow hero, costs by Schedule E bucket, "find a house transaction" search over the commingled stream | ✅ **Built** (revenue detail + projections still to come) |
+| **3 — Tax engine** | Schedule E calc, depreciation, mortgage split, set-aside helper, CPA flags + disclaimers, IRS source citations | ✅ **Built** |
+| **3.5 — Deduction watchlist** | The deductions with no bank line to file — mileage, home office, furnishings, elections, carryforwards — each expandable to what it is, why it qualifies, and the IRS page | ✅ **Built** |
+| **4 — Polish & future** | Airbnb earnings CSV, projections, occupancy tax tracker, multi-property polish, reviews/business metrics | ⬜ Later |
 
-> **Shipped in Phase 0+1:** `src/data/property.js` (Schedule E lines, merchant-memory
-> helpers, defaults), property state + tagging in `src/hooks/useBudget.js`, the
-> `🏡 Airbnb` sub-tab and `src/components/Airbnb.jsx`, and two new synced columns
-> (`properties`, `property_rules`) on `budget_state`.
+> **Where it lives now:** `src/data/house.js` (the buckets, each naming its
+> Schedule E line), `src/data/property.js` (property + tax inputs, merchant-memory
+> helpers), `src/lib/tax.js` (the pure engine), `src/data/taxSources.js` (IRS
+> sources + the deduction watchlist), `src/hooks/useRental.js` (state + sync),
+> `src/components/Rental.jsx` (the 🏡 / 🧮 / 🧠 / 🏦 views) and
+> `src/components/TaxReport.jsx` (the Schedule E report). Synced through the
+> `properties`, `property_rules` and `smart_rules` columns on `budget_state`.
+>
+> **Every Schedule E expense line now has a bucket** — advertising, auto & travel,
+> legal, management and other-interest were added when the spending side was
+> dropped, so nothing deductible has to be filed as "Other".
 
 ---
 
