@@ -5,7 +5,10 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // `design_handoff_sunnyheron_rebrand/` is a design drop, not app code: loose
+  // JSX fragments that never get built or imported. Linting them buried the
+  // handful of real findings in src/ under ~150 no-undef errors.
+  globalIgnores(['dist', 'design_handoff_sunnyheron_rebrand']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [

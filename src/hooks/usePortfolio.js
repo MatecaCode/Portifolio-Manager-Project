@@ -7,6 +7,10 @@ import { migrateHoldings, migrateReviews, migrateTargets } from '../lib/migrate'
 
 const LS_KEY = 'portfolio_v4'
 
+// How often quotes refresh on their own. The Header tooltip quotes this number
+// to the user, so keep the two in step.
+const PRICE_REFRESH_MS = 5 * 60 * 1000
+
 // Columns added after the table was first created. A deployment whose Supabase
 // schema predates them still syncs everything else.
 const OPTIONAL_COLUMNS = ['reviews', 'imported_lots']
@@ -15,7 +19,7 @@ function lsLoad() {
   try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : null } catch { return null }
 }
 function lsSave(s) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(s)) } catch {}
+  try { localStorage.setItem(LS_KEY, JSON.stringify(s)) } catch { /* private mode / quota — the cloud copy is the one that matters */ }
 }
 
 export function usePortfolio() {
@@ -66,7 +70,7 @@ export function usePortfolio() {
             setReady(true)
             return
           }
-        } catch {}
+        } catch { /* fall through to localStorage */ }
       }
       // Fallback to localStorage
       const saved = lsLoad()
@@ -106,11 +110,22 @@ export function usePortfolio() {
     }, 800)
   }, [importedLots])
 
+  // Everything the price tick writes back reads from here rather than from the
+  // values a callback closed over. The 5-minute timer is created once, so
+  // without this it kept re-persisting the state as it stood at page load —
+  // silently reverting any target, FX rate, cash account, review or imported-lot
+  // change made since. Updated after every render, so it is never behind.
+  const latest = useRef({})
+  useEffect(() => {
+    latest.current = { holdings, targets, fxRate, accounts, reviews, importedLots }
+  })
+
   // ── Price refresh ──
   const refreshPrices = useCallback(async (currentHoldings) => {
-    if (!currentHoldings?.length) return
+    const startFrom = currentHoldings ?? latest.current.holdings
+    if (!startFrom?.length) return
     setPriceStatus('loading')
-    const { prices, errors, requested, missing } = await fetchAllPrices(currentHoldings)
+    const { prices, errors, requested, missing } = await fetchAllPrices(startFrom)
     setPriceErrors(errors)
 
     // Which tickers actually came back live, and from where. The Holdings LIVE
@@ -122,28 +137,31 @@ export function usePortfolio() {
 
     if (Object.keys(prices).length === 0) { setPriceStatus('error'); return }
 
-    setHoldings(prev => {
-      const updated = prev.map(h => {
-        const p = prices[h.ticker?.toUpperCase()]
-        return p ? { ...h, price: p.price } : h
-      })
-      persistState(updated, targets, fxRate, accounts, reviews)
-      return updated
+    // Read the rest of the row at write time, not at callback-creation time.
+    const live = latest.current
+    const updated = (live.holdings ?? startFrom).map(h => {
+      const p = prices[h.ticker?.toUpperCase()]
+      return p ? { ...h, price: p.price } : h
     })
+    setHoldings(updated)
+    persistState(updated, live.targets, live.fxRate, live.accounts, live.reviews, live.importedLots)
     // Partial is its own state: crypto needs no key, so a dead Finnhub key used
     // to still report "Prices live" while every stock quietly went stale.
     setPriceStatus(missing?.length ? 'partial' : 'live')
     setLastUpdated(new Date())
     setPriceCoverage({ live: requested.length - (missing?.length || 0), total: requested.length })
-  }, [targets, fxRate, accounts, reviews, persistState])
+  }, [persistState])
 
-  // Auto refresh every 60s
+  // Quotes refresh once the data is loaded, then on a timer. The interval is
+  // created once, so it calls through a ref instead of capturing the callback
+  // (and with it, a snapshot of the whole portfolio) as it stood at that moment.
+  const refreshRef = useRef(refreshPrices)
+  useEffect(() => { refreshRef.current = refreshPrices }, [refreshPrices])
+
   useEffect(() => {
     if (!ready) return
-    refreshPrices(holdings)
-    priceTimer.current = setInterval(() => {
-      setHoldings(h => { refreshPrices(h); return h })
-    }, 300000)
+    refreshRef.current()
+    priceTimer.current = setInterval(() => refreshRef.current(), PRICE_REFRESH_MS)
     return () => clearInterval(priceTimer.current)
   }, [ready])
 
@@ -263,7 +281,7 @@ export function usePortfolio() {
     persistState(holdings, targets, rate, accounts, reviews)
   }, [holdings, targets, accounts, reviews, persistState])
 
-  const manualRefresh = useCallback(() => refreshPrices(holdings), [holdings, refreshPrices])
+  const manualRefresh = useCallback(() => refreshPrices(), [refreshPrices])
 
   // ── Cash accounts CRUD ──
   const addAccount = useCallback(() => {
