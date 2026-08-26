@@ -37,7 +37,7 @@ export default function Login({ signIn }) {
           </div>
         </div>
 
-        <p className="login-intro">Sign in to see your portfolio and budget.</p>
+        <p className="login-intro">Sign in to see your portfolio and the house.</p>
 
         <label className="login-field">
           <span className="login-label">Email</span>

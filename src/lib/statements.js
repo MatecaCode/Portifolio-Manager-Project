@@ -4,7 +4,7 @@
 //   • Chase checking/savings PDF (TRANSACTION DETAIL: date / desc / amount / balance)
 //   • Chase activity CSV      (Details, Posting Date, Description, Amount, Type, Balance)
 //   • Chase credit card CSV   (Transaction Date, Post Date, Description, Category, Type, Amount)
-import { categorize } from '../data/budget'
+import { categorize } from '../data/house'
 
 // Account kinds that hold a real cash balance — a credit card owes money, it
 // doesn't hold it. Wealthfront savings sits here next to Chase checking so its

@@ -14,7 +14,7 @@
 //
 // Keep this file free of tax *decisions* we shouldn't make automatically (material
 // participation, SE tax, QBI) — those surface as CPA flags, never as auto-answers.
-import { isHouseCategory, scheduleELineFor } from '../data/budget'
+import { isHouseCategory, scheduleELineFor } from '../data/house'
 
 // ── constants ──────────────────────────────────────────────────────────────
 export const RECOVERY_YEARS = 27.5
@@ -163,8 +163,8 @@ export function mortgageSplit(tax = {}) {
 // net income/(loss). PITI, capital, and unclassified are surfaced separately so
 // nothing is double-counted or silently swept into a deduction.
 export function scheduleESummary({ transactions = [], property, tax = {}, year }) {
-  // The category is the classification: sorting a transaction into a House
-  // bucket on the Spending tab is what puts it on a Schedule E line here.
+  // The category is the classification: filing a transaction into a House
+  // bucket on the Rental tab is what puts it on a Schedule E line here.
   // One property today, so a house category implies which one.
   const txs = transactions.filter(t => isHouseCategory(t.category) && yearOf(t.date) === year)
 

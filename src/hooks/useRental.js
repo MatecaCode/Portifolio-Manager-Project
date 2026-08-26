@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { merchantKey, isAirbnbIncome, PROPERTY_DEFAULTS, TAX_DEFAULTS } from '../data/property'
-import { smartRuleMatches, isInvestmentTransfer, isHouseCategory, HOUSE_EXPENSE_CATEGORIES } from '../data/budget'
+import { smartRuleMatches, isHouseCategory, HOUSE_EXPENSE_CATEGORIES, PERSONAL } from '../data/house'
 
 const LS_KEY = 'budget_v1'
 
-// Bumped whenever the category list learns something that changes where
-// already-imported transactions belong. The stamp lives in `budgets` because
-// that column is free-form JSON — no schema change needed to record it.
-const SCHEMA = 3
+// Bumped whenever the category list changes in a way that moves already-imported
+// transactions. The stamp rides in the `budgets` column — free-form JSON that
+// used to hold the spending budgets, so recording it there needs no migration.
+const SCHEMA = 4
 
 // Schedule E line -> the house category that now feeds it.
 const CATEGORY_FOR_LINE = Object.fromEntries(HOUSE_EXPENSE_CATEGORIES.map(c => [c.scheduleE, c.id]))
@@ -17,21 +17,12 @@ const houseCategoryForLine = line => CATEGORY_FOR_LINE[line] || 'house_other'
 // Re-file data that predates a category the app has since learned about. The
 // stamp stops it re-running once anything has been saved, so a line you
 // deliberately moved afterwards is never dragged back.
-function migrateBudget(state) {
-  const from = state.budgets?.schema || 1
+function migrateState(state) {
+  const from = state.meta?.schema || 1
   if (from >= SCHEMA) return state
   let transactions = state.transactions || []
   let merchantRules = state.merchantRules || []
   let smartRules = state.smartRules || []
-
-  if (from < 2) {
-    // "Investing & saving" arrived after these were imported, so brokerage
-    // ACHs are sitting in "Everything else", inflating the spending total.
-    transactions = transactions.map(t =>
-      t.kind === 'expense' && (!t.category || t.category === 'other') && isInvestmentTransfer(t.desc)
-        ? { ...t, category: 'investing' }
-        : t)
-  }
 
   if (from < 3) {
     // The rental used to be a second axis: sort a transaction into a budget
@@ -50,10 +41,22 @@ function migrateBudget(state) {
       r.propertyId ? { ...r, category: r.category || houseCategoryForLine(r.scheduleE), propertyId: null, scheduleE: null } : r)
   }
 
-  return {
-    ...state, transactions, merchantRules, smartRules,
-    budgets: { ...(state.budgets || {}), schema: SCHEMA },
+  if (from < 4) {
+    // Spending tracking is gone (Rocket Money does that now). Every personal
+    // budget category collapses into the single "not the rental" bucket; the
+    // house categories — the ones the Schedule E report reads — are untouched.
+    transactions = transactions.map(t =>
+      isHouseCategory(t.category) ? t : { ...t, category: PERSONAL })
+    // A learned "always file this merchant in 🛒 Groceries" now points at a
+    // category that no longer exists, so it's dropped. Review flags survive:
+    // "don't guess this vendor" still means something.
+    merchantRules = merchantRules.filter(r => r.action === 'review' || isHouseCategory(r.category))
+    smartRules = smartRules
+      .map(r => (r.category && !isHouseCategory(r.category)) ? { ...r, category: null } : r)
+      .filter(r => r.category || r.review)
   }
+
+  return { ...state, transactions, merchantRules, smartRules, meta: { schema: SCHEMA } }
 }
 
 function lsLoad() {
@@ -88,7 +91,8 @@ export function applySmartRules(tx, smartRules) {
 
 // On import, file each transaction using — in order of authority — the user's
 // explicit smart rules, then the learned merchant memory, then whatever the
-// description-based categorizer already decided in the parser.
+// description-based categorizer already decided in the parser. Anything none of
+// them claims stays personal, which is where most lines belong.
 //
 // Learned merchant rules come in two flavours:
 //   • a category rule { key, category }        — always file this vendor here
@@ -111,11 +115,14 @@ function attributeTx(tx, merchantRules, smartRules = []) {
   return rule ? { ...next, category: rule.category } : next
 }
 
-export function useBudget() {
+// The rental ledger: imported bank statements, the transactions in them, the
+// property and its tax inputs, and the rules that decide which lines are the
+// house's. Household spending is deliberately NOT tracked here — every
+// transaction is either the rental's or personal, and personal is a dead end.
+export function useRental() {
   const [accounts, setAccounts]       = useState([])
   const [statements, setStatements]   = useState([])
   const [transactions, setTransactions] = useState([])
-  const [budgets, setBudgets]         = useState({}) // { total: n, perCat: { catId: n } }
   const [properties, setProperties]   = useState([]) // [{ id, name, emoji, state, ... }]
   // Learned merchant→category memory. Persisted under the old property_rules
   // key: it used to hold merchant→property tags, and migration rewrote those
@@ -125,6 +132,9 @@ export function useBudget() {
   const [syncStatus, setSyncStatus]   = useState('local')
   const [ready, setReady]             = useState(false)
   const saveTimer = useRef(null)
+  // Bookkeeping that isn't user data — just the migration stamp. A ref because
+  // it never changes after load and shouldn't re-run a single callback.
+  const meta = useRef({ schema: SCHEMA })
 
   // ── Load: Supabase first, fallback localStorage (same pattern as usePortfolio) ──
   useEffect(() => {
@@ -135,14 +145,14 @@ export function useBudget() {
           const { data, error } = await supabase
             .from('budget_state').select('*').eq('id', 'shared').single()
           if (!error && data) {
-            const m = migrateBudget({
-              transactions: data.transactions || [], budgets: data.budgets || {},
+            const m = migrateState({
+              transactions: data.transactions || [], meta: data.budgets || {},
               merchantRules: data.property_rules || [], smartRules: data.smart_rules || [],
             })
+            meta.current = m.meta
             setAccounts(data.accounts || [])
             setStatements(data.statements || [])
             setTransactions(m.transactions)
-            setBudgets(m.budgets)
             setProperties(data.properties || [])
             setMerchantRules(m.merchantRules)
             setSmartRules(m.smartRules)
@@ -154,16 +164,19 @@ export function useBudget() {
       }
       const saved = lsLoad()
       if (saved) {
-        const m = migrateBudget({
-          transactions: saved.transactions || [], budgets: saved.budgets || {},
+        const m = migrateState({
+          transactions: saved.transactions || [],
+          // `budgets` is where the stamp has always lived, alongside the
+          // spending budgets this app no longer keeps.
+          meta: saved.meta || saved.budgets || {},
           // `propertyRules` is the pre-merge name of the same list
           merchantRules: saved.merchantRules || saved.propertyRules || [],
           smartRules: saved.smartRules || [],
         })
+        meta.current = m.meta
         setAccounts(saved.accounts || [])
         setStatements(saved.statements || [])
         setTransactions(m.transactions)
-        setBudgets(m.budgets)
         setProperties(saved.properties || [])
         setMerchantRules(m.merchantRules)
         setSmartRules(m.smartRules)
@@ -174,15 +187,15 @@ export function useBudget() {
     init()
   }, [])
 
-  const persist = useCallback((acc, sts, txs, bud, props = properties, rules = merchantRules, srules = smartRules) => {
-    lsSave({ accounts: acc, statements: sts, transactions: txs, budgets: bud, properties: props, merchantRules: rules, smartRules: srules })
+  const persist = useCallback((acc, sts, txs, props = properties, rules = merchantRules, srules = smartRules) => {
+    lsSave({ accounts: acc, statements: sts, transactions: txs, meta: meta.current, properties: props, merchantRules: rules, smartRules: srules })
     if (!supabase) return
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
       setSyncStatus('syncing')
       try {
         const { error } = await supabase.from('budget_state').upsert({
-          id: 'shared', accounts: acc, statements: sts, transactions: txs, budgets: bud,
+          id: 'shared', accounts: acc, statements: sts, transactions: txs, budgets: meta.current,
           properties: props, property_rules: rules, smart_rules: srules,
           updated_at: new Date().toISOString(),
         })
@@ -245,12 +258,12 @@ export function useBudget() {
     setAccounts(nextAccounts)
     setStatements(nextStatements)
     setTransactions(nextTxs)
-    persist(nextAccounts, nextStatements, nextTxs, budgets)
+    persist(nextAccounts, nextStatements, nextTxs)
     return {
       added: fresh.length, dupes, tagged, accountId: account.id, statementId: statement.id,
       kind: parsed.kind, endingBalance: parsed.endingBalance ?? null, periodEnd: parsed.periodEnd,
     }
-  }, [accounts, statements, transactions, budgets, merchantRules, smartRules, persist])
+  }, [accounts, statements, transactions, merchantRules, smartRules, persist])
 
   // Latest known cash position for an account = ending balance of its most
   // recent statement. Cards never carry a balance (they owe, they don't hold).
@@ -260,22 +273,22 @@ export function useBudget() {
     return sts.reduce((a, s) => (s.periodEnd > a.periodEnd ? s : a)).endingBalance
   }, [statements])
 
-  // Map a budget account to a portfolio cash account so balances flow over.
+  // Map a bank account to a portfolio cash account so balances flow over.
   const linkAccount = useCallback((id, portfolioAccountId) => {
     setAccounts(prev => {
       const next = prev.map(a => a.id === id ? { ...a, portfolioAccountId: portfolioAccountId || null } : a)
-      persist(next, statements, transactions, budgets)
+      persist(next, statements, transactions)
       return next
     })
-  }, [statements, transactions, budgets, persist])
+  }, [statements, transactions, persist])
 
   const renameAccount = useCallback((id, name) => {
     setAccounts(prev => {
       const next = prev.map(a => a.id === id ? { ...a, name } : a)
-      persist(next, statements, transactions, budgets)
+      persist(next, statements, transactions)
       return next
     })
-  }, [statements, transactions, budgets, persist])
+  }, [statements, transactions, persist])
 
   const removeStatement = useCallback(id => {
     const nextStatements = statements.filter(s => s.id !== id)
@@ -286,54 +299,35 @@ export function useBudget() {
     setStatements(nextStatements)
     setTransactions(nextTxs)
     setAccounts(nextAccounts)
-    persist(nextAccounts, nextStatements, nextTxs, budgets)
-  }, [accounts, statements, transactions, budgets, persist])
+    persist(nextAccounts, nextStatements, nextTxs)
+  }, [accounts, statements, transactions, persist])
 
   const recategorize = useCallback((txId, category) => {
     setTransactions(prev => {
       const next = prev.map(t => t.id === txId ? { ...t, category } : t)
-      persist(accounts, statements, next, budgets)
+      persist(accounts, statements, next)
       return next
     })
-  }, [accounts, statements, budgets, persist])
-
-  const setTotalBudget = useCallback(value => {
-    setBudgets(prev => {
-      const next = { ...prev, total: parseFloat(value) || 0 }
-      persist(accounts, statements, transactions, next)
-      return next
-    })
-  }, [accounts, statements, transactions, persist])
-
-  const setCategoryBudget = useCallback((catId, value) => {
-    setBudgets(prev => {
-      const perCat = { ...(prev.perCat || {}) }
-      const n = parseFloat(value)
-      if (n > 0) perCat[catId] = n; else delete perCat[catId]
-      const next = { ...prev, perCat }
-      persist(accounts, statements, transactions, next)
-      return next
-    })
-  }, [accounts, statements, transactions, persist])
+  }, [accounts, statements, persist])
 
   // ── properties ──
   const addProperty = useCallback((partial = {}) => {
     const prop = { id: uid('prop'), ...PROPERTY_DEFAULTS, ...partial }
     const next = [...properties, prop]
     setProperties(next)
-    persist(accounts, statements, transactions, budgets, next, merchantRules)
+    persist(accounts, statements, transactions, next)
     return prop
-  }, [accounts, statements, transactions, budgets, properties, merchantRules, persist])
+  }, [accounts, statements, transactions, properties, persist])
 
   const updateProperty = useCallback((id, patch) => {
     const next = properties.map(p => p.id === id ? { ...p, ...patch } : p)
     setProperties(next)
-    persist(accounts, statements, transactions, budgets, next, merchantRules)
-  }, [accounts, statements, transactions, budgets, properties, merchantRules, persist])
+    persist(accounts, statements, transactions, next)
+  }, [accounts, statements, transactions, properties, persist])
 
-  // Patch a property's tax-engine inputs (Phase 3). Deep-merges the two nested
-  // objects (form1098, escrow) so a partial patch never wipes the other fields,
-  // and backfills TAX_DEFAULTS for properties created before the tax phase.
+  // Patch a property's tax-engine inputs. Deep-merges the two nested objects
+  // (form1098, escrow) so a partial patch never wipes the other fields, and
+  // backfills TAX_DEFAULTS for properties created before the tax phase.
   const updatePropertyTax = useCallback((id, patch = {}) => {
     const next = properties.map(p => {
       if (p.id !== id) return p
@@ -348,8 +342,8 @@ export function useBudget() {
       }
     })
     setProperties(next)
-    persist(accounts, statements, transactions, budgets, next, merchantRules)
-  }, [accounts, statements, transactions, budgets, properties, merchantRules, persist])
+    persist(accounts, statements, transactions, next)
+  }, [accounts, statements, transactions, properties, persist])
 
   const removeProperty = useCallback(id => {
     const nextProps = properties.filter(p => p.id !== id)
@@ -357,8 +351,8 @@ export function useBudget() {
     // property leaves its transactions filed exactly where they were — they'd
     // be right again the moment a property comes back.
     setProperties(nextProps)
-    persist(accounts, statements, transactions, budgets, nextProps, merchantRules)
-  }, [accounts, statements, transactions, budgets, properties, merchantRules, persist])
+    persist(accounts, statements, transactions, nextProps)
+  }, [accounts, statements, transactions, properties, persist])
 
   // "Always file this merchant here" — re-files every line from the vendor and
   // teaches the rule so next month's import lands in the same place. The plain
@@ -371,12 +365,12 @@ export function useBudget() {
       (t.kind === 'expense' && merchantKey(t.desc) === key) ? { ...t, category, reviewFlag: false } : t)
     setMerchantRules(nextRules)
     setTransactions(nextTxs)
-    persist(accounts, statements, nextTxs, budgets, properties, nextRules)
-  }, [accounts, statements, transactions, budgets, properties, merchantRules, persist])
+    persist(accounts, statements, nextTxs, properties, nextRules)
+  }, [accounts, statements, transactions, properties, merchantRules, persist])
 
-  // Flag (or unflag) a merchant for manual review. While on, the AI stops
-  // auto-deciding that vendor — every matching line lands in the review box
-  // until you remove the tag, at which point normal auto-tagging resumes.
+  // Flag (or unflag) a merchant for manual review. While on, nothing is
+  // auto-decided for that vendor — every matching line lands in the review box
+  // until you remove the tag, at which point normal auto-filing resumes.
   const setMerchantReview = useCallback((desc, on) => {
     const key = merchantKey(desc)
     let nextRules, nextTxs
@@ -388,14 +382,14 @@ export function useBudget() {
         (t.kind !== 'transfer' && merchantKey(t.desc) === key) ? { ...t, reviewFlag: true } : t)
     } else {
       nextRules = merchantRules.filter(r => !(r.key === key && r.action === 'review'))
-      // clear the flag — these go back to normal untagged candidates
+      // clear the flag — these go back to normal unfiled candidates
       nextTxs = transactions.map(t =>
         (t.reviewFlag && merchantKey(t.desc) === key) ? { ...t, reviewFlag: false } : t)
     }
     setMerchantRules(nextRules)
     setTransactions(nextTxs)
-    persist(accounts, statements, nextTxs, budgets, properties, nextRules)
-  }, [accounts, statements, transactions, budgets, properties, merchantRules, persist])
+    persist(accounts, statements, nextTxs, properties, nextRules)
+  }, [accounts, statements, transactions, properties, merchantRules, persist])
 
   // File a single review line for THIS occurrence only. Unlike
   // recategorizeMerchant it deliberately learns no rule, so the merchant stays
@@ -405,8 +399,8 @@ export function useBudget() {
       ? { ...t, category: category || t.category, reviewFlag: false }
       : t)
     setTransactions(nextTxs)
-    persist(accounts, statements, nextTxs, budgets, properties, merchantRules)
-  }, [accounts, statements, transactions, budgets, properties, merchantRules, persist])
+    persist(accounts, statements, nextTxs)
+  }, [accounts, statements, transactions, persist])
 
   // ── smart rules (user-built "description contains → action") ──
   // Create a rule and, by default, sweep it across existing transactions too so
@@ -419,21 +413,21 @@ export function useBudget() {
       : transactions
     setSmartRules(nextRules)
     setTransactions(nextTxs)
-    persist(accounts, statements, nextTxs, budgets, properties, merchantRules, nextRules)
+    persist(accounts, statements, nextTxs, properties, merchantRules, nextRules)
     return r
-  }, [accounts, statements, transactions, budgets, properties, merchantRules, smartRules, persist])
+  }, [accounts, statements, transactions, properties, merchantRules, smartRules, persist])
 
   const updateSmartRule = useCallback((id, patch) => {
     const nextRules = smartRules.map(r => r.id === id ? { ...r, ...patch } : r)
     setSmartRules(nextRules)
-    persist(accounts, statements, transactions, budgets, properties, merchantRules, nextRules)
-  }, [accounts, statements, transactions, budgets, properties, merchantRules, smartRules, persist])
+    persist(accounts, statements, transactions, properties, merchantRules, nextRules)
+  }, [accounts, statements, transactions, properties, merchantRules, smartRules, persist])
 
   const removeSmartRule = useCallback(id => {
     const nextRules = smartRules.filter(r => r.id !== id)
     setSmartRules(nextRules)
-    persist(accounts, statements, transactions, budgets, properties, merchantRules, nextRules)
-  }, [accounts, statements, transactions, budgets, properties, merchantRules, smartRules, persist])
+    persist(accounts, statements, transactions, properties, merchantRules, nextRules)
+  }, [accounts, statements, transactions, properties, merchantRules, smartRules, persist])
 
   // Re-apply one rule to every existing transaction it matches; returns the count.
   const applySmartRule = useCallback(id => {
@@ -446,15 +440,14 @@ export function useBudget() {
       return applySmartRules(t, [r])
     })
     setTransactions(nextTxs)
-    persist(accounts, statements, nextTxs, budgets, properties, merchantRules, smartRules)
+    persist(accounts, statements, nextTxs, properties, merchantRules, smartRules)
     return count
-  }, [accounts, statements, transactions, budgets, properties, merchantRules, smartRules, persist])
+  }, [accounts, statements, transactions, properties, merchantRules, smartRules, persist])
 
   return {
     ready, syncStatus,
-    accounts, statements, transactions, budgets, properties, merchantRules, smartRules,
+    accounts, statements, transactions, properties, merchantRules, smartRules,
     importStatement, renameAccount, removeStatement, recategorize, recategorizeMerchant,
-    setTotalBudget, setCategoryBudget,
     addProperty, updateProperty, updatePropertyTax, removeProperty,
     setMerchantReview, resolveReview,
     addSmartRule, updateSmartRule, removeSmartRule, applySmartRule,

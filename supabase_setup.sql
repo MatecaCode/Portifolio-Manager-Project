@@ -44,19 +44,33 @@ insert into portfolio_state (id)
 -- Verify it worked:
 select * from portfolio_state;
 
--- ── Budget platform (applied 2026-06-12 as migration create_budget_state) ──
--- Single shared JSON-blob row, same pattern as portfolio_state.
+-- ── Rental platform (applied 2026-06-12 as migration create_budget_state) ──
+-- Single shared JSON-blob row, same pattern as portfolio_state. The table keeps
+-- its original name: it started life as a budgeting app, and in August 2026 the
+-- spending side was dropped (Rocket Money does that) leaving the Texas-house
+-- rental + Schedule E module. No column changes were needed — see below for how
+-- `budgets` is used now.
 create table if not exists budget_state (
   id           text primary key default 'shared',
   accounts     jsonb not null default '[]',
   statements   jsonb not null default '[]',
   transactions jsonb not null default '[]',
-  budgets      jsonb not null default '{}',
+  budgets      jsonb not null default '{}',   -- now just { schema } — the migration stamp
   updated_at   timestamptz default now()
 );
 
 -- Same rule as portfolio_state, and this one matters more: budget_state holds
 -- imported bank statements, transactions, balances and property/tax data.
+--
+-- What each column holds today:
+--   accounts       [{ id, kind, last4, emoji, name, portfolioAccountId }]
+--   statements     [{ id, key, accountId, periodStart, periodEnd, endingBalance, txCount }]
+--   transactions   [{ id, accountId, statementId, date, desc, amount, kind,
+--                     category, reviewFlag }] — `category` is either 'personal'
+--                   or a House bucket, and a House bucket names its Schedule E line
+--   budgets        { schema: n } — the client-side migration stamp, nothing else.
+--                   Schema 4 collapsed every old personal spending category
+--                   ('groceries', 'dining', …) into the single 'personal' bucket.
 alter table budget_state enable row level security;
 
 create policy "household access"
@@ -72,8 +86,9 @@ insert into budget_state (id) values ('shared') on conflict do nothing;
 -- ── Airbnb / property module (migration add_properties_to_budget_state) ──
 -- properties:     [{ id, name, emoji, address, state, type, placedInService,
 --                    purchasePrice, landPct, monthlyPayment, active, tax }]
--- property_rules: learned merchant→property memory [{ id, key, propertyId, scheduleE }]
--- Per-transaction attribution (propertyId, scheduleE) lives inside the transactions blob.
+-- property_rules: learned merchant memory [{ id, key, category }] or
+--                 [{ id, key, action: 'review' }] — the name predates the merge
+--                 of property tagging into the category itself.
 --
 -- Phase 3 (tax engine) adds a `tax` sub-object INSIDE each property — no new column,
 -- it rides along in the existing properties JSONB:
@@ -89,7 +104,7 @@ alter table budget_state
 
 -- ── Smart rules (migration add_smart_rules_to_budget_state) ──
 -- User-built "description contains <phrase> → action" rules, managed in-app on
--- the Budget → Rules tab. Checked before the built-in keyword categorizer.
--- smart_rules: [{ id, contains, enabled, category, propertyId, scheduleE, review }]
+-- the Rental → Rules tab. Checked before the built-in keyword categorizer.
+-- smart_rules: [{ id, contains, enabled, category, review }]
 alter table budget_state
   add column if not exists smart_rules jsonb not null default '[]';

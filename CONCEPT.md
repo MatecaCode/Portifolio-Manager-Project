@@ -147,69 +147,75 @@ with publishable key — acceptable for a 2-person household app).
 - He says "thin class" sometimes in voice transcription — it means FinClass
 - Repo name has a typo he's kept: "Portifolio" — don't "fix" it, it matches
   the GitHub/Vercel project names
+## Rental Companion — the Texas house (August 2026)
 
-## Budget Companion (planned — placeholder shipped June 2026)
+A second "platform" living next to the portfolio: same SunnyHeron brand,
+toggled via the 📊 Portfolio / 🏡 Rental switch in the header. Portfolio = what
+we keep; Rental = the house in Allen, TX that we moved out of and now rent on
+Airbnb.
 
-A second "platform" living next to the portfolio: same SunnyHeron brand, warm
-"Honey" palette instead of Sea Glass, toggled via the 📊 Portfolio / 💸 Budget
-switch in the header (next to the sync chip). Portfolio = what we keep;
-Budget = what we spend.
+**It used to be a budget app.** Through mid-2026 this side tracked household
+spending: 11 emoji categories, per-category budgets, a donut of where the money
+went, a "Coach's corner". That's gone as of August 2026 — Rocket Money does the
+day-to-day spending job better and we weren't going to do it twice. What was
+worth keeping is the part no budgeting app does: pulling the rental out of the
+commingled joint accounts and turning it into a Schedule E year-end report.
 
-**The vision (Matheus's words, paraphrased):** take a Chase credit card or
-account statement and break the expenses into a clean, fun budgeting view —
-detail when we want it, plus category sections showing where the most money
-goes, and recommendations on how to decrease expenses next month. Must be fun,
-not plain. Also needs a way to set up a budget if we want a goal to aim for.
+**The problem it solves.** The same joint Chase cards and checking pay for the
+Florida apartment, the Texas house, and everything else. Nothing marks which
+charge is the rental's. So the app imports the statements and asks exactly one
+question per line: *is this the house?* Most lines are 👤 Personal and stop
+there — they're never totalled, budgeted or charted, they just stay searchable.
 
-**Planned flow:**
-1. Drop in a Chase statement (CSV or PDF) — no bank logins, file-only
-2. Auto-categorize every transaction into emoji categories
-   (🏠 Home, 🛒 Groceries, 🌮 Dining out, 🎢 Fun & travel, 🚗 Transport,
-   📺 Subscriptions, 🧺 Everything else) with learnable merchant rules and
-   one-tap re-filing
-3. Monthly recap: spent vs budget per category, donut breakdown, and a
-   "Coach's corner" with painless ways to cut spending (over-budget nudges,
-   unused-subscription hunting, savings-to-portfolio framing)
-4. Budget goals: per-category caps or one monthly cap, with live progress bars
-   and playful reward framing ("stay under and the difference funds taco night")
+**The flow:**
+1. Drop in a Chase card/checking statement (PDF or CSV) or a Wealthfront
+   savings export — parsed in the browser, previewed before anything saves.
+2. The unmistakable lines file themselves: the mortgage servicer
+   (`SERVICEMAC`) and the hosting platforms' fees. Airbnb payouts land as
+   rental income.
+3. Everything else lands as personal. Search it for the ones that were really
+   the house — a plumber, a Home Depot run, the Allen utility — and file each
+   into a House bucket in one tap.
+4. Each House bucket **is** a Schedule E line, so filing a transaction is the
+   tax classification. There is no second round of tagging.
+5. The Taxes view turns that into the year-end report: Schedule E lines,
+   depreciation, the 1098/escrow mortgage split, a set-aside estimate, CPA
+   flags, and a watchlist of deductions that never show up as a bank line.
 
-**Reference apps (successful cases to borrow from):**
-- **YNAB** — every dollar gets a job (zero-based budgeting)
-- **Copilot Money** — delightful auto-categorization, best-in-class fun design
-- **Monarch Money** — shared finances built for couples
-- **Rocket Money** — unused-subscription detection and cancellation nudges
+**Teaching it:** 🧠 *Always* learns a merchant ("every Octopus Energy line is
+House · Utilities"), ✨ *Rule* builds a plain-English "description contains X →
+file as Y" rule, and 🔍 sends an ambiguous merchant (a family Zelle) to a manual
+review queue instead of guessing.
 
-**Current state (June 2026): functional v1.** PDF + CSV import works end-to-end:
-- `src/lib/statements.js` — pdf.js (v4, kept for older-browser compat) extracts
-  text in the browser (file never leaves the page); regex parsers for Chase
-  credit card (ACCOUNT ACTIVITY) and Chase checking (TRANSACTION DETAIL)
-  formats. Gotchas handled: double-spaced headers, detached minus signs
-  ("- 25.00"), Dec→Jan billing cycles, multi-line FX descriptions.
-- CSV import too (`parseStatement` dispatches on extension): Chase activity
-  CSV (Details, Posting Date, Description, Amount, **Type**, Balance) and
-  Chase card CSV (Transaction Date, …, Type, Amount). The Type column is
-  authoritative — ACCT_XFER/LOAN_PMT → transfer, credits → income, debits →
-  categorized expense — more reliable than guessing from the description.
-  CSV is the long-term format (Chase only offers ~recent months as PDF).
-  last4 comes from the filename ("Chase9269_Activity_…"); RFC-4180 parser
-  handles quoted descriptions with embedded commas. A CSV re-import merges
-  into the matching PDF account and transaction-level dedup drops the
-  overlapping rows (verified: PDF 29 + CSV 141 − 23 overlaps = 147).
-- `src/data/budget.js` — 11 emoji categories + ordered merchant rules
-  (H-E-B PHARMACY→health before H-E-B→groceries, UBER EATS before UBER, etc.)
-- `src/hooks/useBudget.js` — Supabase `budget_state` shared-row sync (table
-  applied as migration `create_budget_state`), localStorage fallback.
+**How it's built:**
+- `src/lib/statements.js` — pdf.js extracts text in the browser (the file never
+  leaves the page); regex parsers for Chase credit card (ACCOUNT ACTIVITY),
+  Chase checking (TRANSACTION DETAIL), Chase activity/card CSV and Wealthfront
+  CSV. Gotchas handled: double-spaced headers, detached minus signs
+  ("- 25.00"), Dec→Jan billing cycles, multi-line FX descriptions. On CSV the
+  Type column is authoritative (ACCT_XFER/LOAN_PMT → transfer, credits →
+  income). A CSV re-import merges into the matching PDF account and
+  transaction-level dedup drops the overlapping rows.
+- `src/data/house.js` — one 👤 Personal bucket + the House buckets, each naming
+  the Schedule E line it feeds; the two auto-file rules; smart-rule matching.
+- `src/data/property.js`, `src/lib/tax.js`, `src/data/taxSources.js` — the
+  property + its tax inputs, the pure tax engine (27.5-yr straight-line
+  depreciation with the mid-month convention, mortgage split, passive-loss and
+  §280A tests, set-aside), and the IRS sources behind every claim.
+- `src/hooks/useRental.js` — Supabase `budget_state` shared-row sync (the table
+  keeps its original name), localStorage fallback, and the migration that
+  collapsed every old personal category into 👤 Personal (schema 4).
+- `src/components/Rental.jsx` — the four views: 🏡 the house (cash flow, review
+  queue, buckets, search), 🧮 Taxes, 🧠 Rules, 🏦 Accounts.
 - Duplicate detection: statement-level (same account + closing date blocked)
   and transaction-level (account+date+amount+description key).
-- Transfers (card payments, savings moves) are excluded from spending so the
-  same dollar never counts twice; checking deposits tracked as income.
-- UI: import preview before save, per-account profiles (rename inline,
-  tap to include/exclude, "Combine all"), month picker, category drill-down
-  with per-transaction recategorize, total + per-category budgets,
-  data-driven Coach's corner, statement list with undo-import.
-- Verified against real statements: card ···7448 reconciles to the penny
-  ($2,792.04 = purchases + fee − refund); checking ···9269 all 29 rows.
+- Bank balances still feed net worth: the closing balance of the newest
+  statement flows into a linked portfolio cash account (🏦 Accounts → Sync to).
 
-**Next ideas:** merchant-rule learning from manual recategorizations, more
-bank formats (Wealthfront cash), monthly recap story like the Growth tab,
-subscription/recurring detection view, budget rollover.
+**Not tax advice.** Every figure in the Taxes view is an estimate to organize
+the year and guide a CPA conversation — labelled as such, with the IRS page
+behind each rule one tap away.
+
+**Next ideas:** the Airbnb earnings CSV (true gross rent vs. host fees rather
+than net payouts), revenue projections, the local hotel-occupancy-tax tracker,
+and multi-property support (a House bucket implies the property today).

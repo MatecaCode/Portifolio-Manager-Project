@@ -10,7 +10,7 @@ import { fmt } from '../lib/format';
 const SOURCES = [
   { id: 'ibkr',        name: 'Interactive Brokers',   icon: '🌐', live: true, detail: 'Trade Confirmation report (PDF) — updates holdings and average cost' },
   { id: 'wealthfront', name: 'Wealthfront',           icon: '🏛️', live: true, detail: 'Cash Account CSV — updates your emergency-savings balance' },
-  { id: 'chase_bank',  name: 'Chase Bank',            icon: '🏦', detail: 'Checking balances — available on the Budget side' },
+  { id: 'chase_bank',  name: 'Chase Bank',            icon: '🏦', detail: 'Checking balances — available on the Rental side' },
   { id: 'kraken',      name: 'Kraken',                icon: '🪙', detail: 'Crypto positions and balances from the ledger CSV' },
   { id: 'fidelity',    name: 'Fidelity',              icon: '📈', detail: 'US stock positions from the portfolio CSV' },
   { id: 'b3',          name: 'B3 / Brazilian broker', icon: '🇧🇷', detail: 'Notas de corretagem and position reports' },
